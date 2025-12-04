@@ -1,0 +1,77 @@
+# ----------------------------------------------------------------------
+# 1. Arquivos de Build do LaTeX (Gerados pelo pdflatex/xelatex)
+# ----------------------------------------------------------------------
+# O compilador gera muitos arquivos temporários que não devem ser versionados.
+*.aux
+*.bbl
+*.blg
+*.brf
+*.dvi
+*.log
+*.lof
+*.lot
+*.nav
+*.out
+*.snm
+*.toc
+*.snm
+*.vrb
+*.snm
+
+# Arquivos criados por compiladores específicos (ex: makeindex)
+*.idx
+*.ind
+*.ilg
+
+# Arquivos de backup criados por alguns editores LaTeX
+*.bak
+*.old
+
+# Arquivos de cache do latexmk
+*.fls
+*.fdb_latexmk
+
+# ----------------------------------------------------------------------
+# 2. Arquivos de Saída Gerados (Output Final)
+# ----------------------------------------------------------------------
+# Exclui o PDF final, pois ele pode ser regenerado a partir do .tex
+# Se você tiver que versionar o PDF (ex: relatórios finais), remova esta linha.
+*.pdf
+
+# ----------------------------------------------------------------------
+# 3. Arquivos do Python / Ambiente (Jinja2, Scripts)
+# ----------------------------------------------------------------------
+# Dependências e ambientes virtuais
+venv/
+.venv/
+env/
+/lib/
+/bin/
+
+# Cache de bytecode
+__pycache__/
+*.pyc
+*.pyd
+*.pyo
+
+# Build de distribuição
+dist/
+build/
+*.egg-info/
+
+# Cache do pip
+.pip-cache/
+
+# IDEs e Editores (Opcional, mas útil)
+.vscode/ # Configurações do VS Code
+.idea/   # Configurações do PyCharm / IntelliJ
+*~       # Arquivos de backup do Linux/Unix (ex: vim)
+
+# ----------------------------------------------------------------------
+# 4. Arquivos Gerados pelo Jinja2/Script
+# ----------------------------------------------------------------------
+# Exclui o arquivo .tex gerado, se ele for apenas um output temporário.
+# Se você tiver templates nomeados, garanta que os arquivos de saída não sejam versionados.
+# Exemplo: Se o seu script gera 'report_final_maria.tex', liste aqui.
+# Se o nome do seu template for 'template.tex', você PODE querer ignorar 'output.tex'
+# output.tex
