@@ -1,7 +1,17 @@
 [project]
-name = "texflow"
+name = "TexFlow"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = ["jinja2>=3.1.6", "matplotlib>=3.10.7", "pandas>=2.3.3"]
+
+dependencies = [
+    "jinja2>=3.1.6",
+    "matplotlib>=3.10.7",
+    "pandas>=2.3.3",
+    "prompt-toolkit>=3.0.52",
+    "yaspin>=3.3.0",
+]
+
+[project.urls]
+Repository = "https://github.com/felipevale23/texflow"

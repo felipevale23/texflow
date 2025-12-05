@@ -1,6 +1,7 @@
-def main():
-    print("Hello from texflow!")
+from src.scripts.cli import cli
 
+def main():
+    cli()
 
 if __name__ == "__main__":
     main()

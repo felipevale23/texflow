@@ -31,6 +31,8 @@ TeXFlow é construído sobre as seguintes tecnologias:
 
 Você deve ter uma distribuição $\LaTeX$ instalada (como **TeX Live** ou **MiKTeX**) e o compilador `xelatex` ou `pdflatex` acessível no seu PATH.
 
+* Python 3.12.0
+
 ### Via pip
 
 ```bash

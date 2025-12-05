@@ -17,6 +17,9 @@
 *.snm
 *.vrb
 *.snm
+*.lbl
+*.bbl
+*.synctex.gz
 
 # Arquivos criados por compiladores específicos (ex: makeindex)
 *.idx
