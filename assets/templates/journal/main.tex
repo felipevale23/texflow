@@ -5,8 +5,9 @@
 \usepackage{lscape}
 \usepackage{hologo}
 
-\begin{document}
+\addbibresource{bibliography.bib}
 
+\begin{document}
 	% Do not change the following line
 	\linespread{0.5}
 
@@ -30,6 +31,8 @@
 	\pagestyle{fancy}
 
 	\begin{abstract}
+		<< author >>
+
 		This document sets out the requirements for preparing manuscripts for the CONVR/ICIO.
 		It is essential that all manuscripts conform to these instructions. 
 		Note that this document contains both general instructions and structures specific to the preparation of manuscripts using \hologo{LaTeX}.
@@ -260,16 +263,14 @@
 
 	\subsection{References}
 
-	References to the literature should be cited in the main text with an Arabic number in square brackets \cite{Ha_2012}. 
+	References to the literature should be cited in the main text with an Arabic number in square brackets \cite{Ha}. 
 	References should then appear in cited order at the very end of your paper in the Section \textbf{References}. 
-	Start each reference on a new line with its number in square brackets \cite{Ha_2012}. 
-	Citation formats are given below for: a journal article \cite{Ha_2012}, conference paper \cite{Kwok_2012}, book \cite{Book}, and a website \cite{Website}.
+	Start each reference on a new line with its number in square brackets \cite{Ha}. 
+	Citation formats are given below for: a journal article \cite{Ha}, conference paper \cite{Kwok}, book \cite{Book}, and a website \cite{Website}.
 
 	The formatting of the references is done automatically by the \hologo{LaTeX} template.
 	All you need to do is add your references in the CONVRICIO.bib Bibtex file and cite the papers in the text using the command \verb|\cite{}| (as well as \verb|\citet{}|).
 
 	Within the Bibtex file, please ensure that all references that have a DOI actually include it. It will then appear in the compiled references.
-
-	\bibliography{bibliography}
 
 \end{document}

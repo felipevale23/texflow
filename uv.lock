@@ -570,7 +570,7 @@ wheels = [
 [[package]]
 name = "texflow"
 version = "0.1.0"
-source = { virtual = "." }
+source = { editable = "." }
 dependencies = [
     { name = "jinja2" },
     { name = "matplotlib" },

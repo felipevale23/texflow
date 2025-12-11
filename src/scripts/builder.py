@@ -1,57 +1,264 @@
 import os
-import time
+import re
+import sys
+import tempfile
+import subprocess
+import importlib.resources as res
 
-from jinja2 import Environment, FileSystemLoader
+from pathlib import Path
+from collections import OrderedDict
+from jinja2 import Environment, PackageLoader
+from yaspin import yaspin
+from prompt_toolkit.formatted_text import FormattedText, HTML
+from prompt_toolkit.shortcuts import print_formatted_text
 
-def build():
+from classes.data import Data
+from configs.style import STYLE
+from configs.paths import BUILD_DIR
+from classes.task import Task, CleanBuild, RenderTemplate, CopyTree, FnTask
+
+def check_unresolved_placeholders(tex_file):
+    """Verifica se ainda existem placeholders não resolvidos no arquivo .tex"""
+    content = Path(tex_file).read_text(encoding="utf-8")
+    placeholders = re.findall(r"<<.*?>>", content)
+    if placeholders:
+        raise RuntimeError(
+            f"Placeholders não resolvidos encontrados no .tex: {placeholders}"
+        )
+
+def run_latex_command(emoji, cmd, cwd=None, env=None):
+    """Executa comando LaTeX com debug detalhado."""
     
-    # --- 1. CONFIGURAÇÃO DO JINJA2 ---
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    env = Environment(
-        loader=FileSystemLoader(script_dir),
-        trim_blocks=True,
-        lstrip_blocks=True    
+    # tenta identificar o arquivo .tex no comando
+    tex_file = None
+    for arg in cmd:
+        if arg.endswith(".tex"):
+            tex_file = Path(cwd or os.getcwd()) / arg
+            break
+
+    if tex_file and tex_file.exists():
+        check_unresolved_placeholders(tex_file)
+    
+    print_formatted_text(
+        HTML(f'<cmd> {emoji} </cmd> <sub-msg> Executando: {' '.join(cmd)} (cwd={cwd or os.getcwd()})" </sub-msg>'), style=STYLE
     )
-    
-    # Certifique-se de que o template (.tex) está na mesma pasta
-    template = env.get_template('certificado_template.tex') 
 
-    # --- 2. DADOS VARIÁVEIS ---
-    alunos_para_certificar = [
-        {
-            'nome_aluno': 'Lucas Fontes',
-            'nome_curso': 'Análise de Dados Avançada',
-            'horas_aula': 80,
-            'nota_final': 9.5,
-            'data_emissao': '05 de Dezembro de 2025'
-        }
+    # cria log temporário
+    log_file = tempfile.NamedTemporaryFile(delete=False, suffix=".log")
+
+    try:
+        subprocess.run(
+            cmd,
+            check=True,
+            cwd=cwd,
+            env=env,
+            capture_output=True,
+            text=True
+        )
+    except subprocess.CalledProcessError as e:
+        print("\n❌ Erro na execução!")
+        summary = summarize_latex_log(e.stdout, e.stderr)
+        # salva log detalhado se quiser
+        log_file.write(((e.stdout or "") + "\n" + (e.stderr or "")).encode())
+        log_file.close()
+        # levanta erro com resumo curto e caminho do log completo
+        raise RuntimeError(
+            f"Compilação falhou — resumo:\n{summary}\n\nLog completo: {log_file.name}"
+        ) from e
+
+def xelatex_build_process(template_folder):
+    # Setup do ambiente
+    env = os.environ.copy()
+    env["TEXINPUTS"] = f"build:assets/templates/{template_folder}:"
+
+    commands_to_run = [
+        ("🐢", ["xelatex", "-interaction=nonstopmode", "-output-directory=build", "main.tex"], None),
+        ("🚀", ["biber", "main"], "build"),
+        ("🐢", ["xelatex", "-interaction=nonstopmode", "-output-directory=build", "main.tex"], None)
     ]
     
-    # --- 3. Processamento e Compilação com XeLaTeX ---
-    for aluno in alunos_para_certificar:
-        # 3.1. Renderização
-        output_latex_code = template.render(aluno)
-
-        # 3.2. Salva o arquivo .tex
-        nome_arquivo_base = aluno['nome_aluno'].replace(' ', '_').lower()
-        tex_filename = f"{nome_arquivo_base}_certificado.tex"
-        pdf_filename = f"{nome_arquivo_base}_certificado.pdf"
-
-        with open(tex_filename, 'w', encoding='utf8') as f:
-            f.write(output_latex_code)
+    try:
+        for emoji, cmd, cwd in commands_to_run:
+            run_latex_command(emoji, cmd, cwd=cwd, env=env)
+        print("✨ Compilação do documento concluída com sucesso! ✨")
         
-        print(f"Gerado {tex_filename}...")
+    except RuntimeError as e:
+        print(f"\n❌ Erro crítico: {e}")
+        print("O processo de compilação foi interrompido.")
+        sys.exit(1)
 
-        # 3.3. COMPILAÇÃO: Chamando o XeLaTeX
+def summarize_latex_log(stdout: str, stderr: str = None, max_examples: int = 6) -> str: # type: ignore
+    s = (stdout or "") + ("\n" + stderr if stderr else "")
+    s.splitlines()
+
+    # 1) Erros LaTeX (linhas que começam com "!")
+    errors = []
+    for m in re.finditer(r'(?m)^! (.+)$', s):
+        msg = m.group(1).strip()
+        # tenta achar trecho "l.<num> ..." perto do erro
+        tail = s[m.end(): m.end() + 600]
+        lm = re.search(r'l\.(\d+)\s*(.*)', tail)
+        if not lm:
+            # procura a última ocorrência de l.<num> antes do erro
+            prev = s[:m.start()]
+            prev_l = re.findall(r'l\.(\d+)\s*(.*)', prev)
+            if prev_l:
+                ln, snippet = prev_l[-1]
+            else:
+                ln, snippet = None, ""
+        else:
+            ln, snippet = lm.group(1), lm.group(2).strip()
+        errors.append({'msg': msg, 'line': ln, 'snippet': snippet})
+    # 2) Placeholders <<...>>
+    placeholders = re.findall(r'<<\s*([^<>]+?)\s*>>', s)
+    placeholders = list(OrderedDict.fromkeys(placeholders))  # uniq preserve order
+
+    # 3) Missing characters
+    missing_chars = re.findall(r'Missing character: There is no (.+?) in font (.+?)!', s)
+    # 4) Citations undefined
+    cites = re.findall(r"LaTeX Warning: Citation '([^']+)' .*undefined(?: on input line (\d+))?", s)
+    cite_keys = list(OrderedDict.fromkeys([c[0] for c in cites]))
+    # 5) References undefined
+    refs = re.findall(r"LaTeX Warning: Reference `([^`]+)' .* undefined(?: on input line (\d+))?", s)
+    ref_keys = list(OrderedDict.fromkeys([r[0] for r in refs]))
+    # 6) No .bbl / empty bibliography / biblatex asks to run Biber
+    no_bbl = re.findall(r'No file ([\w\./-]+)\.', s)
+    empty_bib = 'LaTeX Warning: Empty bibliography' in s
+    ask_biber = 'Please (re)run Biber' in s or 'Please (re)run Biber' in s or 'Please (re)run Biber' in s
+    # 7) Overfull boxes
+    overfull = re.findall(r'Overfull \\hbox.*', s)
+    # 8) Output written
+    out_written = re.search(r'Output written on (.+?) \((\d+) pages\)\.', s)
+
+    parts = []
+    if errors:
+        parts.append("Erros LaTeX (primeiros):")
+        for e in errors[:max_examples]:
+            if e['line']:
+                parts.append(f" • linha {e['line']}: {e['msg']}  — trecho: {e['snippet']!s}")
+            else:
+                parts.append(f" • {e['msg']}")
+    if placeholders:
+        parts.append("Placeholders não resolvidos:")
+        parts.append(" • " + ", ".join(placeholders[:max_examples]))
+    if missing_chars:
+        groups = {}
+        for ch, font in missing_chars:
+            groups.setdefault(font.strip(), set()).add(ch.strip())
+        parts.append("Caracteres faltando (provavelmente por math-mode):")
+        for font, chars in groups.items():
+            parts.append(f" • {font}: {', '.join(list(chars)[:10])}")
+    if cite_keys:
+        parts.append(f"Citações não encontradas ({len(cite_keys)}):")
+        parts.append(" • " + ", ".join(cite_keys[:max_examples]))
+        if len(cite_keys) > max_examples:
+            parts.append(f" • ... +{len(cite_keys)-max_examples} outros")
+    if ref_keys:
+        parts.append(f"Referências não resolvidas ({len(ref_keys)}):")
+        parts.append(" • " + ", ".join(ref_keys[:max_examples]))
+    if no_bbl:
+        parts.append(f"Aviso: arquivo(s) de bibliografia ausente(s): {', '.join(no_bbl[:max_examples])}")
+    if empty_bib:
+        parts.append("Bibliografia vazia.")
+    if ask_biber:
+        parts.append("biblatex pede: rodar `biber output` e recompilar (biber + 2x xelatex).")
+    if overfull:
+        parts.append(f"Overfull \\hbox: {len(overfull)} ocorrência(s) (avisos de layout).")
+    if out_written:
+        parts.append(f"PDF gerado: {out_written.group(1)} ({out_written.group(2)} páginas).")
+    if not parts:
+        return "Nenhuma indicação clara de erro encontrada no stdout."
+    return "\n".join(parts)
+
+def _jinja_env() -> Environment:
+    # 1. Instancia o PackageLoader:
+    # O loader irá procurar templates dentro da pasta 'templates'
+    # que está dentro do pacote 'assets'.
+    loader = PackageLoader(
+        package_name="assets", 
+        package_path="templates"
+    )
+    
+    return Environment(
+        loader=loader,
+        variable_start_string="<<",
+        variable_end_string=">>",
+        block_start_string="<<%",
+        block_end_string="%>>",
+        autoescape=False,
+        trim_blocks=True,
+        lstrip_blocks=True,
+    )
+
+def build(data_path: str, template_folder = "journal"):
+    """
+    Cria o arquivo .tex com as variáveis passadas
+    """
+    
+    print = print_formatted_text
+    
+    BUILD_DIR.mkdir(exist_ok=True)
+
+    data = Data()
+    data.load_from_file(Path(data_path))
+    context = data.get_payload()
+    
+    # --- Jinja ---
+    env = _jinja_env()
+    template = env.get_template(f"{template_folder}/main.tex")
+    
+    # --- Tasks ---
+    tasks: list[Task] = []
+    
+    clean   = CleanBuild()
+    render  = RenderTemplate(        
+        template=template,
+        context=context,
+        output=BUILD_DIR / "main.tex",
+        dependencies=[clean]
+    )
+    copy_images = CopyTree(
+        res.files('assets').joinpath('images'), 
+        BUILD_DIR / "images", 
+        dependencies = [clean]
+    )
+    copy_plots  = CopyTree(
+        res.files('assets').joinpath('plots'), 
+        BUILD_DIR / "plots", 
+        dependencies = [clean]
+    )
+    copy_files  = CopyTree(
+        res.files('assets').joinpath('templates').joinpath(template_folder), 
+        BUILD_DIR, 
+        ignore_tex=True, 
+        dependencies = [clean]
+    )
+    compile_pdf = FnTask(xelatex_build_process,
+        template_folder,
+        mode="chain",
+        dependencies=[clean, render, copy_images, copy_plots, copy_files]
+    )
+    
+    # append tudo numa vez só
+    tasks.extend([
+        clean,
+        render,
+        copy_images,
+        copy_plots,
+        copy_files,
+        compile_pdf
+    ])
+
+    with yaspin(color="magenta") as sp:
         try:
-            # Usamos 'xelatex' em vez de 'pdflatex'
-            # O modo 'batchmode' suprime mensagens no terminal
-            os.system(f"xelatex -interaction=batchmode {tex_filename}")
-            os.system(f"xelatex -interaction=batchmode {tex_filename}") # Duas vezes para referências
-
-            # Opcional: Limpar arquivos auxiliares (.log, .aux, etc.)
-            os.system(f"rm *.aux *.log *.out" if os.name != 'nt' else f"del *.aux *.log *.out")
-            
-            print(f"Sucesso ao gerar {pdf_filename} usando XeLaTeX!")
+            Task.runner(tasks)
+            sp.ok("✔")
         except Exception as e:
-            print(f"Falha na compilação do PDF para {aluno['nome_aluno']}: {e}")
+            sp.fail("✖")
+            with sp.hidden():
+                print(
+                    FormattedText(
+                        [("fg:#ff0000 bold", f"Erro: {e}")]
+                    ), style=STYLE
+                )
+            sp.fail("🐛")

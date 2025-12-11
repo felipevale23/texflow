@@ -21,7 +21,8 @@ TeXFlow é construído sobre as seguintes tecnologias:
 * **Jinja2:** Para a camada de template e lógica de renderização.
 * **NumPy:** Para manipulação de dados numéricos (tabelas, cálculos).
 * **Matplotlib:** Para gerar gráficos e figuras que são incluídos no $\LaTeX$.
-* **XeLaTeX (ou pdflatex):** O motor de compilação $\LaTeX$ recomendado para o resultado final em PDF.
+* **XeLaTeX:** O motor de compilação $\LaTeX$ recomendado para o resultado final em PDF.
+* **biber:** O motor de compilação $\BibLaTex$ recomendado para o resultado final em PDF.
 
 ---
 

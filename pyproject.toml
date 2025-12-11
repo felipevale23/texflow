@@ -1,3 +1,7 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "TexFlow"
 version = "0.1.0"
@@ -13,5 +17,30 @@ dependencies = [
     "yaspin>=3.3.0",
 ]
 
+# Gera o comando `texflow` no PATH
+[project.scripts]
+texflow = "main:main"
+
+# CONFIG IMPORTANTE PARA SUA ESTRUTURA (src sem pacote)
+[tool.setuptools]
+# Diz ao setuptools que o código está em ./src/
+package-dir = { "" = "src", "assets" = "assets" }
+
+# Inclui arquivos não-Python DENTRO dos pacotes listados.
+# Isso garante que tudo dentro de 'assets/' (incluindo templates) seja empacotado.
+include-package-data = true
+
+# Como você não quer um pacote com nome próprio,
+# o setuptools vai varrer src/ por pacotes reais
+# e adicionar main.py como módulo solto
+py-modules = ["main"]
+packages = ["assets", "classes", "configs", "scripts"]
+
 [project.urls]
 Repository = "https://github.com/felipevale23/texflow"
+
+[tool.setuptools.package-data]
+# Isto diz ao Setuptools:
+# Para o pacote chamado 'assets', inclua todos os arquivos e diretórios ('*') 
+# que ele encontrar dentro da pasta mapeada (que é './assets').
+assets = ["**/*", "**/.keep"]

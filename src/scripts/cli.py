@@ -2,52 +2,16 @@ import os
 import sys
 import time
 import argparse
+
 from pathlib import Path
 from .builder import build
 from yaspin import yaspin
-from prompt_toolkit.styles import Style
 from prompt_toolkit.formatted_text import FormattedText, HTML
 from prompt_toolkit.shortcuts import print_formatted_text
-
-LOGO = [
-    "  TTTTTTTTTTTTTTTTTTTTTTT                                  FFFFFFFFFFFFFFFFFFFFFFlllllll                                                           ",
-    "  T:::::::::::::::::::::T                                  F::::::::::::::::::::Fl:::::l                                                           ",
-    "  T:::::::::::::::::::::T                                  F::::::::::::::::::::Fl:::::l                                                           ",
-    "  T:::::TT:::::::TT:::::T                                  FF::::::FFFFFFFFF::::Fl:::::l                                                           ",
-    "  TTTTTT  T:::::T  TTTTTTeeeeeeeeeeee  xxxxxxx      xxxxxxx  F:::::F       FFFFFF l::::l    ooooooooooo wwwwwww           wwwww           wwwwwww  ",
-    "          T:::::T      ee::::::::::::ee x:::::x    x:::::x   F:::::F              l::::l  oo:::::::::::oow:::::w         w:::::w         w:::::w   ",
-    "          T:::::T     e::::::eeeee:::::eex:::::x  x:::::x    F::::::FFFFFFFFFF    l::::l o:::::::::::::::ow:::::w       w:::::::w       w:::::w    ",
-    "          T:::::T    e::::::e     e:::::e x:::::xx:::::x     F:::::::::::::::F    l::::l o:::::ooooo:::::o w:::::w     w:::::::::w     w:::::w     ",
-    "          T:::::T    e:::::::eeeee::::::e  x::::::::::x      F:::::::::::::::F    l::::l o::::o     o::::o  w:::::w   w:::::w:::::w   w:::::w      ",
-    "          T:::::T    e:::::::::::::::::e    x::::::::x       F::::::FFFFFFFFFF    l::::l o::::o     o::::o   w:::::w w:::::w w:::::w w:::::w       ",
-    "          T:::::T    e::::::eeeeeeeeeee     x::::::::x       F:::::F              l::::l o::::o     o::::o    w:::::w:::::w   w:::::w:::::w        ",
-    "          T:::::T    e:::::::e             x::::::::::x      F:::::F              l::::l o::::o     o::::o     w:::::::::w     w:::::::::w         ",
-    "        TT:::::::TT  e::::::::e           x:::::xx:::::x   FF:::::::FF           l::::::lo:::::ooooo:::::o      w:::::::w       w:::::::w          ",
-    "        T:::::::::T   e::::::::eeeeeeee  x:::::x  x:::::x  F::::::::FF           l::::::lo:::::::::::::::o       w:::::w         w:::::w           ",
-    "        T:::::::::T    ee:::::::::::::e x:::::x    x:::::x F::::::::FF           l::::::l oo:::::::::::oo         w:::w           w:::w            ",
-    "        TTTTTTTTTTT      eeeeeeeeeeeeeexxxxxxx      xxxxxxxFFFFFFFFFFF           llllllll   ooooooooooo            www             www             "
-]
+from configs.style import LOGO, STYLE                          
 
 # override print with feature-rich ``print_formatted_text`` from prompt_toolkit
 print = print_formatted_text
-
-# Estilo para mensagens com HTML customizado
-style = Style.from_dict({
-    # Mensagem principal
-    'msg':        'bold #93FF96',   # verde + negrito
-    # Mensagem principal
-    'cmd':        'bold #AA7DCE',   # magenta
-    # Sub-mensagem ou descrição
-    'sub-msg':    'italic #616161', # cinza + itálico
-    # Mensagem de aviso
-    'warning':    'bold #ff9800',   # laranja
-    # Mensagem de erro
-    'error':      'bold #f44336',   # vermelho
-    # Mensagem de erro
-    'error-msg':    'italic #f44336', # cinza + itálico
-    # Cabeçalhos ou títulos
-    'header':     'bold underline #2196f3'  # azul + sublinhado
-})
 
 def welcome():
     """
@@ -76,7 +40,7 @@ def welcome():
                 # FormattedText é confiável: tuple (style, text)
                 ft = FormattedText([(f"fg:{cor} bold", line)])
                 with sp.hidden():
-                    print_formatted_text(ft, style=style)
+                    print_formatted_text(ft, style=STYLE)
                 time.sleep(0.01)
             
             sp.stop()
@@ -85,13 +49,13 @@ def welcome():
             print(HTML(
                 f'<error> > </error> <error> Erro: </error>'
                 f'<error-msg> {e} </error-msg>'
-            ), style=style)
+            ), style=STYLE)
             sp.fail("🐛")
         
         except Exception as e:
             sp.fail("✖")
             with sp.hidden():
-                print_formatted_text(FormattedText([("fg:#ff0000 bold", f"Erro: {e}")]), style=style)
+                print_formatted_text(FormattedText([("fg:#ff0000 bold", f"Erro: {e}")]), style=STYLE)
             sp.fail("🐛")
 
 # Obtém o caminho absoluto da pasta onde o script está sendo executado
@@ -101,7 +65,7 @@ def cli():
     
     # 1. Cria um objeto ArgumentParser
     parser = argparse.ArgumentParser(
-        description="Este script faz simulações de geração fotovoltaica e cria documentos com base nos dados obtidos",
+        description="Este script cria documentos com base nos dados inseridos",
         epilog="Use com sabedoria!"
     )
     
@@ -110,6 +74,14 @@ def cli():
         "-b", "--build",
         action="store_true",
         help="Faz o build com base no template latex. O valor será 'True' se esta flag for usada."
+    )
+    
+    # Argumento opcional com flag curta e longa
+    parser.add_argument(
+        "-i", "--input",
+        type=str,
+        nargs='?',
+        help="Arquivo JSON de input"
     )
     
     # 3. Faz o parsing dos argumentos da linha de comando
@@ -132,9 +104,9 @@ def cli():
             welcome()
             raise Exception()
 
-        elif args.build:
+        elif args.build and args.input:
             welcome()
-            build()
+            build(args.input)
         
         else:
             raise Exception("[❌]\n")

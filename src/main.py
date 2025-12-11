@@ -1,4 +1,4 @@
-from src.scripts.cli import cli
+from scripts.cli import cli
 
 def main():
     cli()

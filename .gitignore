@@ -21,6 +21,9 @@
 *.bbl
 *.synctex.gz
 
+*.bcf
+*.run.xml
+
 # Arquivos criados por compiladores específicos (ex: makeindex)
 *.idx
 *.ind

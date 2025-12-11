@@ -1,56 +1,57 @@
-{
-    "latex-workshop.latex.search.rootFiles.include": [
-        "src/main.tex"
-    ],
-    "latex-workshop.intellisense.citation.backend": "biblatex",
-    // (in this file you may have also configured outdir, recipes and tools)
-    "latex-workshop.latex.outDir": "%DIR%/build/",
-    "latex-workshop.latex.build.rootfileInStatus": false,
-    "latex-workshop.latex.recipes": [
-        {
-            "name": "pdflatex -> bibtex -> pdflatex*2",
-            "tools": [
-                "pdflatex",
-                "bibtex",
-                "pdflatex",
-                "pdflatex"
-            ]
-        }
-    ],
-    "latex-workshop.latex.tools": [
-        {
-            "name": "pdflatex",
-            "command": "pdflatex",
-            "args": [
-                "-synctex=1",
-                "-interaction=nonstopmode",
-                "-file-line-error",
-                "-output-directory=%OUTDIR%",
-                "%DOC%"
-            ],
-            "env": {}
-        },
-        {
-            "name": "pdflatex",
-            "command": "pdflatex",
-            "args": [
-                "-synctex=1",
-                "-interaction=nonstopmode",
-                "-file-line-error",
-                "-output-directory=%OUTDIR%",
-                "%DOC%"
-            ],
-            "env": {}
-        },
-        {
-            "name": "bibtex",
-            "command": "bibtex",
-            "args": [
-                "--output-directory=%OUTDIR%",
-                "%DOCFILE%"
-            ],
-            "env": {}
-        },
-    ],
-    "makefile.makefilePath": "/home/felipevale/dev/tex/tcc/src"
-}
+    {
+        "latex-workshop.latex.search.rootFiles.include": [
+            "src/main.tex"
+        ],
+        "latex-workshop.intellisense.citation.backend": "biblatex",
+        // (in this file you may have also configured outdir, recipes and tools)
+        "latex-workshop.latex.outDir": "%DIR%/build/",
+        "latex-workshop.latex.build.rootfileInStatus": false,
+        "latex-workshop.latex.recipes": [
+            {
+                "name": "pdflatex -> biber -> pdflatex",
+                "tools": [
+                    "pdflatex",
+                    "biber",
+                    "pdflatex"
+                ]
+            },
+            {
+                "name": "TexFlow Build",
+                "tools": [
+                    "texflow"
+                ]
+            }
+        ],
+        "latex-workshop.latex.tools": [
+            {
+                "name": "texflow",
+                "command": "texflow",
+                "args": [
+                    "--build",
+                    "--input",
+                    "%DIR%/assets/data/input.json"
+                ]
+            },
+            {
+                "name": "pdflatex",
+                "command": "pdflatex",
+                "args": [
+                    "-synctex=1",
+                    "-interaction=nonstopmode",
+                    "-file-line-error",
+                    "-output-directory=%OUTDIR%",
+                    "%DOC%"
+                ],
+                "env": {}
+            },
+            {
+                "name": "biber",
+                "command": "biber",
+                "args": [
+                    "--output-directory=%OUTDIR%",
+                    "%DOCFILE%"
+                ],
+                "env": {}
+            },
+        ]
+    }
