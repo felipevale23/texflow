@@ -210,8 +210,6 @@ def build(data_path: str, template_folder: str):
     """
     
     print = print_formatted_text
-    
-    print(BUILD_DIR)
 
     with yaspin(color="magenta") as sp:
         

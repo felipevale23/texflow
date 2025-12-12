@@ -6,7 +6,7 @@
 
 ## ✨ Recursos Principais
 
-* **Template Engine Avançado:** Utiliza **Jinja2** para lógica condicional (`{% if %}`), loops (`{% for %}`), e herança de templates dentro de seus arquivos `.tex`.
+* **Template Engine Avançado:** Utiliza **Jinja2** para lógica condicional (`<<% if %>>`), loops (`<<% for %>>`), e herança de templates dentro de seus arquivos `.tex`.
 * **Integração Científica:** Projetado para integrar facilmente dados numéricos de **NumPy** e visualizações gráficas de **Matplotlib** diretamente nos templates.
 * **Compilação Confiável:** Automatiza a compilação de templates `.tex` usando **XeLaTeX**, garantindo suporte moderno para fontes e Unicode.
 * **Solução de Conflito de Sintaxe:** O framework configura o Jinja2 com delimitadores personalizados para **evitar conflitos** com a sintaxe padrão do $\LaTeX$ (`\` e `{}`).
@@ -40,27 +40,25 @@ Você deve ter uma distribuição $\LaTeX$ instalada (como **TeX Live** ou **MiK
     pip install texflow
 ````
 
-*(Observação: substitua por `pip install .` ou o comando correto após empacotar o projeto.)*
-
 -----
 
 ## 📖 Como Usar
 
 ### 1\. Crie seu Template Jinja-LaTeX
 
-Seu template (`report.tex.jinja`) deve usar a sintaxe Jinja para injetar dados.
+Seu template (`report.tex`) deve usar a sintaxe Jinja para injetar dados.
 
 ```tex
     > **Exemplo Simples:**
     >
     > 
     > \documentclass{article}
-    > \title{Relatório Dinâmico de {{ nome_projeto }}}
+    > \title{Relatório Dinâmico de << nome_projeto >>}
     > \begin{document}
     > \maketitle
 
 
-    > O valor médio calculado é: ${{ mean_value | round(2) }}$.
+    > O valor médio calculado é: $<< mean_value | round(2) >> }} $.
 
     > \\end{document}
 ```
