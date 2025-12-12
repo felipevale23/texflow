@@ -1,7 +1,9 @@
 from pathlib import Path
 from importlib.resources import files
 
-BUILD_DIR = Path("build")  # OK: é diretório do usuário, não do pacote
+ROOT_DIR = Path.cwd()
+
+BUILD_DIR = ROOT_DIR / "build" # OK: é diretório do usuário, não do pacote
 
 # Pacote assets dentro do wheel (não é Path físico)
 ASSETS_DIR = files("assets")

@@ -8,7 +8,7 @@ from .builder import build
 from yaspin import yaspin
 from prompt_toolkit.formatted_text import FormattedText, HTML
 from prompt_toolkit.shortcuts import print_formatted_text
-from configs.style import LOGO, STYLE                          
+from configs.style import LOGO, LOGO_PALLET, STYLE                          
 
 # override print with feature-rich ``print_formatted_text`` from prompt_toolkit
 print = print_formatted_text
@@ -28,15 +28,8 @@ def welcome():
             
             os.system('cls' if os.name == 'nt' else 'clear')
             
-            # cores por linha (pode usar quantas quiser, vai ciclar)
-            cores = [
-                "#ff0000", "#ff7f00", "#ffff00", "#7fff00",
-                "#00ff00", "#00ff7f", "#00ffff", "#007fff",
-                "#0000ff", "#7f00ff", "#ff00ff", "#ff007f"
-            ]
-            
             for i, line in enumerate(LOGO):
-                cor = cores[i % len(cores)]
+                cor = LOGO_PALLET[i % len(LOGO_PALLET)]
                 # FormattedText é confiável: tuple (style, text)
                 ft = FormattedText([(f"fg:{cor} bold", line)])
                 with sp.hidden():
@@ -84,6 +77,15 @@ def cli():
         help="Arquivo JSON de input"
     )
     
+    # Argumento opcional com flag curta e longa
+    parser.add_argument(
+        "-t", "--template",
+        type=str,
+        default="journal",
+        nargs='?',
+        help="Caminho para a PASTA do template"
+    )
+    
     # 3. Faz o parsing dos argumentos da linha de comando
     args = parser.parse_args()
     
@@ -106,7 +108,7 @@ def cli():
 
         elif args.build and args.input:
             welcome()
-            build(args.input)
+            build(args.input, args.template)
         
         else:
             raise Exception("[❌]\n")

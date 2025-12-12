@@ -1,5 +1,11 @@
 from prompt_toolkit.styles import Style
 
+LOGO_PALLET = [
+    "#ff0000", "#ff7f00", "#ffff00", "#7fff00",
+    "#00ff00", "#00ff7f", "#00ffff", "#007fff",
+    "#0000ff", "#7f00ff", "#ff00ff", "#ff007f"
+]
+
 # Estilo para mensagens com HTML customizado
 STYLE = Style.from_dict({
     # Mensagem principal

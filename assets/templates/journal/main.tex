@@ -16,8 +16,8 @@
 	\author{Author1FirstName Author1LastName$^{1}$ and Author2FirstName Author2LastName$^2$}
 
 	\affiliation{
-	$^1$School of ..., University of ..., Country\\
-	$^2$School of ..., University of ..., Country
+		$^1$School of ..., University of ..., Country\\
+		$^2$School of ..., University of ..., Country
 	}
 
 	\email{
@@ -32,7 +32,7 @@
 
 	\begin{abstract}
 		<< author >>
-
+		<< author >>
 		This document sets out the requirements for preparing manuscripts for the CONVR/ICIO.
 		It is essential that all manuscripts conform to these instructions. 
 		Note that this document contains both general instructions and structures specific to the preparation of manuscripts using \hologo{LaTeX}.
@@ -116,14 +116,13 @@
 		\item The major heading “Abstract –”, in bold.
 		\item 	The body of the abstract, not to exceed 250 words in length, in bold Times New Roman, fully justified, the first line is indented.
 		\item The major heading “Keywords –” in bold, separated from the last line of the abstract by one blank line.
-		\item The list of keywords, not to exceed ten (10) words, in bold Times New Roman, left justified, indented, and separated by commas. Please add those keywords that you would use if you were searching for your paper. 
-		
+		\item The list of keywords, not to exceed ten (10) words, in bold Times New Roman, left justified, indented, and separated by commas. Please add those keywords that you would use if you were searching for your paper. 	
 	\end{itemize}
 
 	The main text of the paper begins after. Separate sections of the main text in accordance with the Headings guidelines below
 
 	This template already implements all these requirements. Simply use the environments \verb|abstract| and \verb|keywords| as illustrated in this template.
-
+	
 	\subsubsection{Headings}
 
 	All headings must be in black and in bold face. The manuscript will typically have maximum three levels of headings maximum: Level 1, Level 2, and Level 3. Level-1 headings (e.g. Introduction, Background, Discussion, Conclusions, Acknowledgments, References) have font size 12; Level-2 headings have font size 11; and Level-3 headings have font size 10. 
@@ -156,7 +155,7 @@
 		\item 
 		Add the option \verb|[noitemsep]| to the environment to have no additional space between bulleted list items.
 	\end{itemize}
-
+	
 	Note that the two list above were generated using the environments and options described within them.
 
 	\subsubsection{Footnotes}
@@ -180,7 +179,7 @@
 	\begin{equation}\label{eq_1}
 		ZnS + 3/2O_2 \rightarrow ZnO + SO_2
 	\end{equation}
-
+	
 	\begin{equation}\label{eq_2}
 		ZnS + 3/2O_2 = ZnO+ SO_2
 	\end{equation}
@@ -255,7 +254,7 @@
 
 	Refer to a figure as `Figure X', not using its relative position.
 	For achieving this effectively, use the command \verb|\label{}| within the environment \verb|figure| to label each figure, and then use the command \verb|\ref{}| in the text to refer to the label.
-
+	
 	The same guidance applies to Tables and Equations, as well as Headings.
 	In the case of headings, the command \verb|\label{}| must be declared right after the heading commands (e.g. after the command \verb|\section{}|).
 
@@ -272,5 +271,5 @@
 	All you need to do is add your references in the CONVRICIO.bib Bibtex file and cite the papers in the text using the command \verb|\cite{}| (as well as \verb|\citet{}|).
 
 	Within the Bibtex file, please ensure that all references that have a DOI actually include it. It will then appear in the compiled references.
-
+	
 \end{document}

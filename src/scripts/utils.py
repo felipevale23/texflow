@@ -1,4 +1,15 @@
 import re
+import tempfile
+from pathlib import Path
+
+def is_writable(path: Path) -> bool:
+    try:
+        path.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryFile(dir=path):
+            pass
+        return True
+    except Exception:
+        return False
 
 def parse_money(s: str) -> float:
     s = str(s).strip()

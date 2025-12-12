@@ -7,7 +7,7 @@ import importlib.resources as res
 
 from pathlib import Path
 from collections import OrderedDict
-from jinja2 import Environment, PackageLoader
+from jinja2 import Environment, PackageLoader, FileSystemLoader
 from yaspin import yaspin
 from prompt_toolkit.formatted_text import FormattedText, HTML
 from prompt_toolkit.shortcuts import print_formatted_text
@@ -15,6 +15,7 @@ from prompt_toolkit.shortcuts import print_formatted_text
 from classes.data import Data
 from configs.style import STYLE
 from configs.paths import BUILD_DIR
+from configs.templates import builtin_templates
 from classes.task import Task, CleanBuild, RenderTemplate, CopyTree, FnTask
 
 def check_unresolved_placeholders(tex_file):
@@ -66,21 +67,20 @@ def run_latex_command(emoji, cmd, cwd=None, env=None):
             f"Compilação falhou — resumo:\n{summary}\n\nLog completo: {log_file.name}"
         ) from e
 
-def xelatex_build_process(template_folder):
+def xelatex_build_process():
     # Setup do ambiente
     env = os.environ.copy()
-    env["TEXINPUTS"] = f"build:assets/templates/{template_folder}:"
+    env["TEXINPUTS"] = f"{BUILD_DIR}:"
 
     commands_to_run = [
-        ("🐢", ["xelatex", "-interaction=nonstopmode", "-output-directory=build", "main.tex"], None),
+        ("🐢", ["xelatex", "-interaction=nonstopmode", "main.tex"], "build"),
         ("🚀", ["biber", "main"], "build"),
-        ("🐢", ["xelatex", "-interaction=nonstopmode", "-output-directory=build", "main.tex"], None)
+        ("🐢", ["xelatex", "-interaction=nonstopmode", "main.tex"], "build")
     ]
     
     try:
         for emoji, cmd, cwd in commands_to_run:
             run_latex_command(emoji, cmd, cwd=cwd, env=env)
-        print("✨ Compilação do documento concluída com sucesso! ✨")
         
     except RuntimeError as e:
         print(f"\n❌ Erro crítico: {e}")
@@ -170,95 +170,111 @@ def summarize_latex_log(stdout: str, stderr: str = None, max_examples: int = 6) 
         return "Nenhuma indicação clara de erro encontrada no stdout."
     return "\n".join(parts)
 
-def _jinja_env() -> Environment:
-    # 1. Instancia o PackageLoader:
-    # O loader irá procurar templates dentro da pasta 'templates'
-    # que está dentro do pacote 'assets'.
-    loader = PackageLoader(
-        package_name="assets", 
-        package_path="templates"
-    )
+def _jinja_env(template_arg: str) -> Environment:
     
-    return Environment(
-        loader=loader,
-        variable_start_string="<<",
-        variable_end_string=">>",
-        block_start_string="<<%",
-        block_end_string="%>>",
-        autoescape=False,
-        trim_blocks=True,
-        lstrip_blocks=True,
-    )
+    p = Path(template_arg)
 
-def build(data_path: str, template_folder = "journal"):
+    # Caso 1 — usuário passou caminho real
+    if p.exists() and p.is_dir():
+        return Environment(
+            loader=FileSystemLoader(str(p)),
+            variable_start_string="<<",
+            variable_end_string=">>",
+            block_start_string="<<%",
+            block_end_string="%>>",
+            autoescape=False,
+            trim_blocks=True,
+            lstrip_blocks=True,
+        )
+    else:
+        # 1. Instancia o PackageLoader:
+        # O loader irá procurar templates dentro da pasta 'templates'
+        # que está dentro do pacote 'assets'.
+        if template_arg in builtin_templates:
+            return Environment(
+                loader=PackageLoader(package_name="assets", package_path=f"templates/{template_arg}"),
+                variable_start_string="<<",
+                variable_end_string=">>",
+                block_start_string="<<%",
+                block_end_string="%>>",
+                autoescape=False,
+                trim_blocks=True,
+                lstrip_blocks=True,
+            )
+        else:
+            raise Exception("Default template não encontrado.\n")
+
+def build(data_path: str, template_folder: str):
     """
     Cria o arquivo .tex com as variáveis passadas
     """
     
     print = print_formatted_text
     
-    BUILD_DIR.mkdir(exist_ok=True)
-
-    data = Data()
-    data.load_from_file(Path(data_path))
-    context = data.get_payload()
-    
-    # --- Jinja ---
-    env = _jinja_env()
-    template = env.get_template(f"{template_folder}/main.tex")
-    
-    # --- Tasks ---
-    tasks: list[Task] = []
-    
-    clean   = CleanBuild()
-    render  = RenderTemplate(        
-        template=template,
-        context=context,
-        output=BUILD_DIR / "main.tex",
-        dependencies=[clean]
-    )
-    copy_images = CopyTree(
-        res.files('assets').joinpath('images'), 
-        BUILD_DIR / "images", 
-        dependencies = [clean]
-    )
-    copy_plots  = CopyTree(
-        res.files('assets').joinpath('plots'), 
-        BUILD_DIR / "plots", 
-        dependencies = [clean]
-    )
-    copy_files  = CopyTree(
-        res.files('assets').joinpath('templates').joinpath(template_folder), 
-        BUILD_DIR, 
-        ignore_tex=True, 
-        dependencies = [clean]
-    )
-    compile_pdf = FnTask(xelatex_build_process,
-        template_folder,
-        mode="chain",
-        dependencies=[clean, render, copy_images, copy_plots, copy_files]
-    )
-    
-    # append tudo numa vez só
-    tasks.extend([
-        clean,
-        render,
-        copy_images,
-        copy_plots,
-        copy_files,
-        compile_pdf
-    ])
+    print(BUILD_DIR)
 
     with yaspin(color="magenta") as sp:
+        
         try:
+            
+            BUILD_DIR.mkdir(exist_ok=True)
+
+            # --- Data ---
+            data = Data()
+            data.load_from_file(Path(data_path))
+            context = data.get_payload()
+            
+            # --- Jinja ---
+            env = _jinja_env(template_folder)
+            template = env.get_template("main.tex")
+            
+            # --- Tasks ---
+            tasks: list[Task] = []
+            clean   = CleanBuild()
+            render  = RenderTemplate(        
+                template=template,
+                context=context,
+                output=BUILD_DIR / "main.tex",
+                dependencies=[clean]
+            )
+            copy_images = CopyTree(
+                res.files('assets').joinpath('images'), 
+                BUILD_DIR / "images", 
+                dependencies = [clean]
+            )
+            copy_plots  = CopyTree(
+                res.files('assets').joinpath('plots'), 
+                BUILD_DIR / "plots", 
+                dependencies = [clean]
+            )
+            copy_files = CopyTree(
+                res.files('assets').joinpath('templates', template_folder)
+                if template_folder in builtin_templates
+                else Path(template_folder),
+                BUILD_DIR,
+                ignore_tex=True,
+                dependencies=[clean]
+            )
+            compile_pdf = FnTask(xelatex_build_process,
+                mode="chain",
+                dependencies=[clean, render, copy_images, copy_plots, copy_files]
+            )
+            tasks.extend([
+                clean,
+                render,
+                copy_images,
+                copy_plots,
+                copy_files,
+                compile_pdf
+            ]) # append tudo numa vez só
+            
             Task.runner(tasks)
-            sp.ok("✔")
+            
+            sp.ok("✨ Compilação do documento concluída com sucesso! ✨")
+        
         except Exception as e:
-            sp.fail("✖")
+            
             with sp.hidden():
-                print(
-                    FormattedText(
-                        [("fg:#ff0000 bold", f"Erro: {e}")]
-                    ), style=STYLE
-                )
+                print(FormattedText([("fg:#ff0000 bold", f"✖ Erro: {e}")]), style=STYLE)
+            
             sp.fail("🐛")
