@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "TexFlow"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -52,6 +52,9 @@ include-package-data = true
 # e adicionar main.py como módulo solto
 py-modules = ["main"]
 packages = ["assets", "classes", "configs", "scripts"]
+
+[tool.setuptools.dynamic]
+version = { attr = "configs.version.__version__" }
 
 [project.urls]
 Repository = "https://github.com/felipevale23/texflow"

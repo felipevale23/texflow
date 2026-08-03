@@ -11,6 +11,7 @@ from configs.spinner import spinner
 from configs.style import LOGO, LOGO_PALLET, STYLE
 
 from .builder import build
+from .updater import run_uninstall, run_update
 
 # override print with feature-rich ``print_formatted_text`` from prompt_toolkit
 print = print_formatted_text
@@ -67,13 +68,27 @@ def cli():
         epilog="Use com sabedoria!"
     )
     
-    # 2. Argumento opcional com flag curta e longa
-    parser.add_argument(
+    # 2. Ações mutuamente exclusivas: build, update ou uninstall
+    action_group = parser.add_mutually_exclusive_group()
+
+    action_group.add_argument(
         "-b", "--build",
         action="store_true",
         help="Faz o build com base no template latex. O valor será 'True' se esta flag for usada."
     )
-    
+
+    action_group.add_argument(
+        "--update",
+        action="store_true",
+        help="Verifica se há uma versão mais recente no GitHub e atualiza o binário instalado."
+    )
+
+    action_group.add_argument(
+        "--uninstall",
+        action="store_true",
+        help="Remove o binário instalado do sistema."
+    )
+
     # Argumento opcional com flag curta e longa
     parser.add_argument(
         "-i", "--input",
@@ -81,7 +96,7 @@ def cli():
         nargs='?',
         help="Arquivo JSON de input"
     )
-    
+
     # Argumento opcional com flag curta e longa
     parser.add_argument(
         "-t", "--template",
@@ -90,11 +105,17 @@ def cli():
         nargs='?',
         help="Caminho para a PASTA do template"
     )
-    
+
     parser.add_argument(
         "--debug",
         action="store_true",
         help="Mostra logs detalhados"
+    )
+
+    parser.add_argument(
+        "-y", "--yes",
+        action="store_true",
+        help="Não pede confirmação (usar com --update/--uninstall)."
     )
     
     # 3. Faz o parsing dos argumentos da linha de comando
@@ -119,6 +140,12 @@ def cli():
         if passed_args == 0:
             welcome()
             raise UsageError()
+
+        elif args.update:
+            run_update(args.yes)
+
+        elif args.uninstall:
+            run_uninstall(args.yes)
 
         elif args.build and args.input:
             welcome()

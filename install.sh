@@ -30,6 +30,7 @@ uv run --group build pyinstaller \
     --paths src \
     --add-data "$REPO_ROOT/assets:assets" \
     --collect-data yaspin \
+    --hidden-import ssl \
     --distpath dist \
     --workpath .pyinstaller-build \
     --specpath .pyinstaller-build \

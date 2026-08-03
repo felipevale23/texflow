@@ -119,6 +119,11 @@ texflow --build --input dados.json --template caminho/para/pasta_do_template
 | `-i`, `--input` | sim | Caminho para o JSON de dados (`{"payload": {...}}`). |
 | `-t`, `--template` | não (padrão: `journal`) | Caminho para a pasta do template (deve conter `main.tex`). |
 | `--debug` | não | Ativa logs verbosos (equivalente a `TEXFLOW_DEBUG=1`). |
+| `--update` | não | Verifica a última release no GitHub e, se houver uma versão mais nova, baixa e instala no lugar do binário atual. |
+| `--uninstall` | não | Remove o binário instalado do sistema. |
+| `-y`, `--yes` | não | Pula a confirmação interativa de `--update`/`--uninstall`. |
+
+`--update` e `--uninstall` só têm efeito no **binário standalone** (baixado da release ou gerado por `install.sh`) — rodando a partir do código-fonte (`uv run texflow`), eles apenas indicam o comando equivalente (`git pull && uv sync`).
 
 O PDF final é gerado em `<pasta_do_template>/build/main.pdf`. Imagens e gráficos vêm do pacote (`assets/images` e `assets/plots`) e também são copiados para `build/images` e `build/plots`.
 
