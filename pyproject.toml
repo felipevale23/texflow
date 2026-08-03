@@ -34,6 +34,9 @@ dev = [
     "pytest>=8.3.0",
     "ruff>=0.8.0",
 ]
+build = [
+    "pyinstaller>=6.10.0",
+]
 
 # CONFIG IMPORTANTE PARA SUA ESTRUTURA (src sem pacote)
 [tool.setuptools]
