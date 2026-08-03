@@ -1,31 +1,57 @@
+import hashlib
+import importlib.resources as res
 import os
 import re
+import subprocess
 import sys
 import tempfile
-import subprocess
-import importlib.resources as res
-
-from pathlib import Path
 from collections import OrderedDict
-from jinja2 import Environment, PackageLoader, FileSystemLoader
-from yaspin import yaspin
-from prompt_toolkit.formatted_text import FormattedText, HTML
+from pathlib import Path
+
+from jinja2 import Environment, FileSystemLoader
+from prompt_toolkit.formatted_text import HTML, FormattedText
 from prompt_toolkit.shortcuts import print_formatted_text
 
 from classes.data import Data
-from configs.style import STYLE
+from classes.task import CopyTree, FnTask, RenderTemplate, Task
 from configs.paths import BUILD_DIR
-from configs.templates import builtin_templates
-from classes.task import Task, CleanBuild, RenderTemplate, CopyTree, FnTask
+from configs.spinner import spinner
+from configs.style import STYLE
+
+
+def file_hash(path):
+    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+def should_compile(tex_path):
+    cache = Path(".cache/main.hash")
+
+    files = [tex_path]
+
+    # inclui tudo que influencia
+    files += list(Path("data").glob("**/*.json"))
+    files += list(Path("template").glob("**/*.tex"))
+    
+    h = hashlib.sha256()
+    for f in files:
+        if f.exists():
+            h.update(f.read_bytes())
+
+    new = h.hexdigest()
+    old = cache.read_text() if cache.exists() else None
+
+    if new == old:
+        return False
+
+    cache.parent.mkdir(exist_ok=True)
+    cache.write_text(new)
+    return True
 
 def check_unresolved_placeholders(tex_file):
     """Verifica se ainda existem placeholders não resolvidos no arquivo .tex"""
     content = Path(tex_file).read_text(encoding="utf-8")
     placeholders = re.findall(r"<<.*?>>", content)
     if placeholders:
-        raise RuntimeError(
-            f"Placeholders não resolvidos encontrados no .tex: {placeholders}"
-        )
+        raise RuntimeError(f"Placeholders não resolvidos encontrados no .tex: {placeholders}")
 
 def run_latex_command(emoji, cmd, cwd=None, env=None):
     """Executa comando LaTeX com debug detalhado."""
@@ -41,36 +67,96 @@ def run_latex_command(emoji, cmd, cwd=None, env=None):
         check_unresolved_placeholders(tex_file)
     
     print_formatted_text(
-        HTML(f'<cmd> {emoji} </cmd> <sub-msg> Executando: {' '.join(cmd)} (cwd={cwd or os.getcwd()})" </sub-msg>'), style=STYLE
+        HTML(f'<cmd> {emoji} </cmd> <sub-msg> Executando: {' '.join(cmd)} (cwd={cwd or os.getcwd()})" </sub-msg>'),
+        style=STYLE, 
+        file=sys.stderr
     )
 
     # cria log temporário
-    log_file = tempfile.NamedTemporaryFile(delete=False, suffix=".log")
+    # Garante que o diretório de log temporário exista e o arquivo seja gravado
+    log_temp_path = None
+    debug_mode = os.getenv("TEXFLOW_DEBUG")
 
-    try:
-        subprocess.run(
-            cmd,
-            check=True,
-            cwd=cwd,
-            env=env,
-            capture_output=True,
-            text=True
-        )
-    except subprocess.CalledProcessError as e:
-        print("\n❌ Erro na execução!")
-        summary = summarize_latex_log(e.stdout, e.stderr)
-        # salva log detalhado se quiser
-        log_file.write(((e.stdout or "") + "\n" + (e.stderr or "")).encode())
-        log_file.close()
-        # levanta erro com resumo curto e caminho do log completo
+    # Execução do processo
+    result = subprocess.run(
+        cmd,
+        cwd=cwd,
+        env=env,
+        text=True,
+        capture_output=True, # Sempre capturamos para poder processar o erro
+        check=False
+    )
+
+    if result.returncode != 0:
+        # 1. Tenta extrair um resumo útil
+        # O LaTeX costuma colocar o erro no stdout, não no stderr
+        summary = summarize_latex_log(result.stdout)
+        
+        # 2. Se o resumo for vazio, tenta pegar as últimas linhas do stdout
+        if not summary.strip():
+            lines = result.stdout.splitlines()
+            summary = "\n".join(lines[-10:]) # Pega as últimas 10 linhas como contexto
+
+        # 3. Salva o log completo para inspeção profunda
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".log", mode="w") as f:
+            f.write("--- STDOUT ---\n")
+            f.write(result.stdout or "")
+            f.write("\n--- STDERR ---\n")
+            f.write(result.stderr or "")
+            log_temp_path = f.name
+
+        print(f"\n❌ Erro na execução! Log detalhado: {log_temp_path}", file=sys.stderr)
+
+        # 4. O RAISE: Passamos o resumo para a mensagem principal
+        # Usamos 'from None' se não quiser o traceback do subprocess, 
+        # ou 'from e' para manter a cadeia.
         raise RuntimeError(
-            f"Compilação falhou — resumo:\n{summary}\n\nLog completo: {log_file.name}"
-        ) from e
+            f"Falha na Compilação LaTeX (Código {result.returncode})\n"
+            f"--------------------------------------------------\n"
+            f"{summary}\n"
+            f"--------------------------------------------------\n"
+            f"Log completo em: {log_temp_path}"
+        )
+
+    # Se chegou aqui, deu certo. Se quiser ver o output em modo debug:
+    if debug_mode:
+        print(result.stdout)
+
+def latexmk_build_process(build_dir: Path):
+    """if not should_compile(build_dir / "main.tex"):
+        print_formatted_text("⚡ Nada mudou, pulando compilação.", file=sys.stderr)
+        return"""
+
+    env = os.environ.copy()
+
+    # 🔥 TEXINPUTS correto
+    env["TEXINPUTS"] = f"{build_dir}{os.pathsep}{env.get('TEXINPUTS','')}"
+
+    cmd = [
+        "latexmk",
+        "-xelatex",
+        "-pdfxe",
+        "-f",
+        "-interaction=nonstopmode", # Evita travar pedindo input
+        "-silent",                  # 🔥 Substitui o -quiet e silencia o log
+        "-synctex=1",
+        "-file-line-error"
+    ]
+
+    if os.getenv("TEXFLOW_DEBUG"):
+        cmd.append("-verbose")
+    else:
+        cmd.append("-quiet")
+
+    cmd.append("main.tex")
+
+    # 🔥 cwd dinâmico (adeus "build" hardcoded)
+    run_latex_command("⚡", cmd, cwd=str(build_dir), env=env)
 
 def xelatex_build_process():
     # Setup do ambiente
     env = os.environ.copy()
-    env["TEXINPUTS"] = f"{BUILD_DIR}:"
+    env["TEXINPUTS"] = f"{BUILD_DIR}:{env.get('TEXINPUTS','')}"
 
     commands_to_run = [
         ("🐢", ["xelatex", "-interaction=nonstopmode", "main.tex"], "build"),
@@ -83,11 +169,11 @@ def xelatex_build_process():
             run_latex_command(emoji, cmd, cwd=cwd, env=env)
         
     except RuntimeError as e:
-        print(f"\n❌ Erro crítico: {e}")
-        print("O processo de compilação foi interrompido.")
+        print(f"\n❌ Erro crítico: {e}", file=sys.stderr)
+        print("O processo de compilação foi interrompido.", file=sys.stderr)
         sys.exit(1)
 
-def summarize_latex_log(stdout: str, stderr: str = None, max_examples: int = 6) -> str: # type: ignore
+def summarize_latex_log(stdout: str, stderr: str | None = None, max_examples: int = 6) -> str:
     s = (stdout or "") + ("\n" + stderr if stderr else "")
     s.splitlines()
 
@@ -187,22 +273,7 @@ def _jinja_env(template_arg: str) -> Environment:
             lstrip_blocks=True,
         )
     else:
-        # 1. Instancia o PackageLoader:
-        # O loader irá procurar templates dentro da pasta 'templates'
-        # que está dentro do pacote 'assets'.
-        if template_arg in builtin_templates:
-            return Environment(
-                loader=PackageLoader(package_name="assets", package_path=f"templates/{template_arg}"),
-                variable_start_string="<<",
-                variable_end_string=">>",
-                block_start_string="<<%",
-                block_end_string="%>>",
-                autoescape=False,
-                trim_blocks=True,
-                lstrip_blocks=True,
-            )
-        else:
-            raise Exception("Default template não encontrado.\n")
+        raise FileNotFoundError("Default template não encontrado.\n")
 
 def build(data_path: str, template_folder: str):
     """
@@ -210,12 +281,13 @@ def build(data_path: str, template_folder: str):
     """
     
     print = print_formatted_text
-
-    with yaspin(color="magenta") as sp:
+    with spinner(color="magenta") as sp:
         
         try:
             
-            BUILD_DIR.mkdir(exist_ok=True)
+            template_path = Path(template_folder).resolve()
+            build_dir = template_path / "build"
+            build_dir.mkdir(parents=True, exist_ok=True)
 
             # --- Data ---
             data = Data()
@@ -228,41 +300,40 @@ def build(data_path: str, template_folder: str):
             
             # --- Tasks ---
             tasks: list[Task] = []
-            clean   = CleanBuild()
             render  = RenderTemplate(        
                 template=template,
                 context=context,
-                output=BUILD_DIR / "main.tex",
-                dependencies=[clean]
+                output=build_dir / "main.tex",
+                dependencies=[]
             )
             copy_images = CopyTree(
                 res.files('assets').joinpath('images'), 
-                BUILD_DIR / "images", 
-                dependencies = [clean]
+                build_dir / "images", 
+                dependencies = [render]
             )
             copy_plots  = CopyTree(
                 res.files('assets').joinpath('plots'), 
-                BUILD_DIR / "plots", 
-                dependencies = [clean]
+                build_dir / "plots", 
+                dependencies = [render]
             )
             copy_files = CopyTree(
-                res.files('assets').joinpath('templates', template_folder)
-                if template_folder in builtin_templates
-                else Path(template_folder),
-                BUILD_DIR,
-                ignore_tex=True,
-                dependencies=[clean]
+                Path(template_folder),
+                build_dir,
+                ignore_tex=True, 
+                dependencies=[render]
             )
-            compile_pdf = FnTask(xelatex_build_process,
+
+            compile_pdf = FnTask(
+                latexmk_build_process,
+                build_dir,
                 mode="chain",
-                dependencies=[clean, render, copy_images, copy_plots, copy_files]
+                dependencies=[render, copy_images, copy_plots, copy_files]
             )
             tasks.extend([
-                clean,
-                render,
                 copy_images,
                 copy_plots,
                 copy_files,
+                render,
                 compile_pdf
             ]) # append tudo numa vez só
             
@@ -270,9 +341,9 @@ def build(data_path: str, template_folder: str):
             
             sp.ok("✨ Compilação do documento concluída com sucesso! ✨")
         
-        except Exception as e:
-            
+        except Exception as e:  # noqa: BLE001 - error boundary do build, precisa reportar qualquer falha
+
             with sp.hidden():
-                print(FormattedText([("fg:#ff0000 bold", f"✖ Erro: {e}")]), style=STYLE)
-            
+                print(FormattedText([("fg:#ff0000 bold", f"✖ Erro: {e}")]), style=STYLE, file=sys.stderr)
+
             sp.fail("🐛")

@@ -1,5 +1,5 @@
-from pathlib import Path
 from importlib.resources import files
+from pathlib import Path
 
 ROOT_DIR = Path.cwd()
 

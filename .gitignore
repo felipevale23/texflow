@@ -65,8 +65,10 @@ dist/
 build/
 *.egg-info/
 
-# Cache do pip
+# Caches
 .pip-cache/
+.pytest_cache/
+.ruff_cache/
 
 # IDEs e Editores (Opcional, mas útil)
 .vscode/ # Configurações do VS Code

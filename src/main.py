@@ -1,5 +1,6 @@
 from scripts.cli import cli
 
+
 def main():
     cli()
 

@@ -1,11 +1,13 @@
 import json
 from pathlib import Path
-from typing import TypedDict, Any
+from typing import Any, TypedDict
 
 DATA_DIR = Path("assets/data")
 
+
 class IData(TypedDict):
     payload: dict[str, Any]
+
 
 class Data:
     def __init__(self) -> None:
@@ -32,13 +34,13 @@ class Data:
 
     def _validate(self, data: Any) -> None:
         if not isinstance(data, dict):
-            raise ValueError("JSON deve ser um objeto")
+            raise TypeError("JSON deve ser um objeto")
 
         if "payload" not in data:
             raise ValueError("Campo obrigatório ausente: payload")
 
         if not isinstance(data["payload"], dict):
-            raise ValueError("payload deve ser um objeto")
+            raise TypeError("payload deve ser um objeto")
 
     def get_payload(self) -> dict[str, Any]:
         if self._data is None:

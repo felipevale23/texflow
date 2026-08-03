@@ -17,9 +17,23 @@ dependencies = [
     "yaspin>=3.3.0",
 ]
 
-# Gera o comando `texflow` no PATH
+# Gera comandos no PATH, executáveis com `uv run <comando>`
 [project.scripts]
 texflow = "main:main"
+lint = "scripts.tasks:lint"
+lint-fix = "scripts.tasks:lint_fix"
+format = "scripts.tasks:format_"
+format-check = "scripts.tasks:format_check"
+test = "scripts.tasks:test"
+build-dist = "scripts.tasks:build_dist"
+clean = "scripts.tasks:clean"
+check = "scripts.tasks:check"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.0",
+    "ruff>=0.8.0",
+]
 
 # CONFIG IMPORTANTE PARA SUA ESTRUTURA (src sem pacote)
 [tool.setuptools]

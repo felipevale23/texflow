@@ -1,6 +1,16 @@
+import os
 import re
+import sys
 import tempfile
 from pathlib import Path
+
+
+def debug(msg):
+    if os.getenv("TEXFLOW_DEBUG"):
+        print(f"[DEBUG] {msg}", file=sys.stderr)
+
+def is_tty():
+    return sys.stderr.isatty()
 
 def is_writable(path: Path) -> bool:
     try:
@@ -8,7 +18,7 @@ def is_writable(path: Path) -> bool:
         with tempfile.TemporaryFile(dir=path):
             pass
         return True
-    except Exception:
+    except OSError:
         return False
 
 def parse_money(s: str) -> float:

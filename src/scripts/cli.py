@@ -1,14 +1,16 @@
+import argparse
 import os
 import sys
 import time
-import argparse
-
 from pathlib import Path
-from .builder import build
-from yaspin import yaspin
-from prompt_toolkit.formatted_text import FormattedText, HTML
+
+from prompt_toolkit.formatted_text import HTML, FormattedText
 from prompt_toolkit.shortcuts import print_formatted_text
-from configs.style import LOGO, LOGO_PALLET, STYLE                          
+
+from configs.spinner import spinner
+from configs.style import LOGO, LOGO_PALLET, STYLE
+
+from .builder import build
 
 # override print with feature-rich ``print_formatted_text`` from prompt_toolkit
 print = print_formatted_text
@@ -22,7 +24,7 @@ def welcome():
     # Limpa o console
     os.system('cls' if os.name == 'nt' else 'clear')
     
-    with yaspin() as sp:
+    with spinner() as sp:
         
         try:
             
@@ -33,7 +35,7 @@ def welcome():
                 # FormattedText é confiável: tuple (style, text)
                 ft = FormattedText([(f"fg:{cor} bold", line)])
                 with sp.hidden():
-                    print_formatted_text(ft, style=STYLE)
+                    print_formatted_text(ft, style=STYLE, file=sys.stderr)
                 time.sleep(0.01)
             
             sp.stop()
@@ -42,17 +44,20 @@ def welcome():
             print(HTML(
                 f'<error> > </error> <error> Erro: </error>'
                 f'<error-msg> {e} </error-msg>'
-            ), style=STYLE)
+            ), style=STYLE, file=sys.stderr)
             sp.fail("🐛")
         
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - error boundary da animação, precisa reportar qualquer falha
             sp.fail("✖")
             with sp.hidden():
-                print_formatted_text(FormattedText([("fg:#ff0000 bold", f"Erro: {e}")]), style=STYLE)
+                print_formatted_text(FormattedText([("fg:#ff0000 bold", f"Erro: {e}")]), style=STYLE, file=sys.stderr)
             sp.fail("🐛")
 
 # Obtém o caminho absoluto da pasta onde o script está sendo executado
 root_path = Path(__file__).resolve().parent
+
+class UsageError(Exception):
+    """Argumentos de linha de comando ausentes ou inválidos."""
 
 def cli():
     
@@ -86,6 +91,12 @@ def cli():
         help="Caminho para a PASTA do template"
     )
     
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Mostra logs detalhados"
+    )
+    
     # 3. Faz o parsing dos argumentos da linha de comando
     args = parser.parse_args()
     
@@ -102,19 +113,22 @@ def cli():
     try:
         passed_args = count_passed_args(args, parser)
         
+        if args.debug:
+            os.environ["TEXFLOW_DEBUG"] = "1"
+    
         if passed_args == 0:
             welcome()
-            raise Exception()
+            raise UsageError()
 
         elif args.build and args.input:
             welcome()
             build(args.input, args.template)
-        
+
         else:
-            raise Exception("[❌]\n")
-    
-    except Exception as e:
+            raise UsageError("[❌]\n")
+
+    except Exception as e:  # noqa: BLE001 - também precisa capturar falhas de build(), não só UsageError
         # Se você quiser que o script encerre ou mostre a ajuda aqui, você teria que fazer explicitamente:
-        print(f"{e}")
+        print(f"{e}", file=sys.stderr)
         parser.print_help()
         sys.exit(1)             # Encerra com código de erro
