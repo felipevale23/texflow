@@ -12,6 +12,7 @@ from configs.style import LOGO, LOGO_PALLET, STYLE
 
 from .builder import build
 from .updater import run_uninstall, run_update
+from .utils import is_tty
 
 # override print with feature-rich ``print_formatted_text`` from prompt_toolkit
 print = print_formatted_text
@@ -20,11 +21,16 @@ def welcome():
     """
     Cria uma animação em console para a arte ASCII "TexFlow".
     """
+    # Puramente decorativo: sem TTY não há quem veja a animação, e a
+    # limpeza de tela + escrita caractere-a-caractere só suja logs/pipes.
+    if not is_tty():
+        return
+
     # A arte ASCII é dividida em linhas para animar a exibição.
 
     # Limpa o console
     os.system('cls' if os.name == 'nt' else 'clear')
-    
+
     with spinner() as sp:
         
         try:

@@ -32,8 +32,9 @@ class Task(ABC):
     def runner(cls, tasks: list["Task"]):
         import time
 
-        from yaspin import yaspin
         from yaspin.spinners import Spinners
+
+        from configs.spinner import spinner
 
         TASK_ICONS = {
             "clean-build": "🧹",
@@ -67,7 +68,7 @@ class Task(ABC):
                 t = chain_tasks[0]
 
                 start = time.perf_counter()
-                with yaspin(
+                with spinner(
                     Spinners.dots, text=f"{icon(t)} {t.name}", color="cyan"
                 ) as sp:
                     t.run()
@@ -90,7 +91,7 @@ class Task(ABC):
                         t = future_map[future]
                         start = time.perf_counter()
 
-                        with yaspin(
+                        with spinner(
                             Spinners.dots, text=f"{icon(t)} {t.name}", color="yellow"
                         ) as sp:
                             future.result()
@@ -113,7 +114,7 @@ class Task(ABC):
                     for t, result in async_results:
                         start = time.perf_counter()
 
-                        with yaspin(
+                        with spinner(
                             Spinners.dots, text=f"{icon(t)} {t.name}", color="green"
                         ) as sp:
                             result.get()
