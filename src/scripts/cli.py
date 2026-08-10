@@ -9,6 +9,7 @@ from prompt_toolkit.shortcuts import print_formatted_text
 
 from configs.spinner import spinner
 from configs.style import LOGO, LOGO_PALLET, STYLE
+from configs.version import __version__
 
 from .builder import build
 from .updater import run_uninstall, run_update
@@ -73,7 +74,13 @@ def cli():
         description="Este script cria documentos com base nos dados inseridos",
         epilog="Use com sabedoria!"
     )
-    
+
+    parser.add_argument(
+        "-v", "--version",
+        action="version",
+        version=f"TexFlow {__version__}"
+    )
+
     # 2. Ações mutuamente exclusivas: build, update ou uninstall
     action_group = parser.add_mutually_exclusive_group()
 
