@@ -12,6 +12,15 @@ def debug(msg):
 def is_tty():
     return sys.stderr.isatty()
 
+def confirm(prompt: str, auto_yes: bool) -> bool:
+    if auto_yes:
+        return True
+    if not is_tty():
+        print(f"{prompt} (rode novamente com -y/--yes para confirmar automaticamente)", file=sys.stderr)
+        return False
+    resposta = input(f"{prompt} [y/N] ").strip().lower()
+    return resposta in ("y", "yes", "s", "sim")
+
 def is_writable(path: Path) -> bool:
     try:
         path.mkdir(parents=True, exist_ok=True)

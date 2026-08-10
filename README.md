@@ -119,11 +119,24 @@ texflow --build --input dados.json --template caminho/para/pasta_do_template
 | `-i`, `--input` | sim | Caminho para o JSON de dados (`{"payload": {...}}`). |
 | `-t`, `--template` | não (padrão: `journal`) | Caminho para a pasta do template (deve conter `main.tex`). |
 | `--debug` | não | Ativa logs verbosos (equivalente a `TEXFLOW_DEBUG=1`). |
+| `--init` | não | Cria `.vscode/settings.json` e `.vscode/extensions.json` no diretório atual, com a receita do LaTeX Workshop já configurada pro TexFlow. |
 | `--update` | não | Verifica a última release no GitHub e, se houver uma versão mais nova, baixa e instala no lugar do binário atual. |
 | `--uninstall` | não | Remove o binário instalado do sistema. |
-| `-y`, `--yes` | não | Pula a confirmação interativa de `--update`/`--uninstall`. |
+| `-y`, `--yes` | não | Pula a confirmação interativa de `--update`/`--uninstall`/`--init`. |
+| `-v`, `--version` | não | Mostra a versão instalada e sai. |
 
 `--update` e `--uninstall` só têm efeito no **binário standalone** (baixado da release ou gerado por `install.sh`) — rodando a partir do código-fonte (`uv run texflow`), eles apenas indicam o comando equivalente (`git pull && uv sync`).
+
+### 4\. (opcional) Integre com o VS Code + LaTeX Workshop
+
+```bash
+cd caminho/para/pasta_do_template
+texflow --init
+```
+
+Isso cria `.vscode/settings.json` (com uma receita `TexFlow Build` já configurada como padrão, comentada explicando cada opção) e `.vscode/extensions.json` (recomendando a extensão [LaTeX Workshop](https://marketplace.visualstudio.com/items?itemName=James-Yu.latex-workshop)). Com isso, `Ctrl+S` no `main.tex` roda o TexFlow automaticamente e o preview/painel de erros/SyncTeX da extensão funcionam a partir do `build/main.pdf` e `build/main.log` gerados.
+
+> Convém rodar `--init` na mesma pasta que contém `input.json` e `main.tex` — a receita gerada assume `--input %DIR%/input.json --template %DIR%`.
 
 O PDF final é gerado em `<pasta_do_template>/build/main.pdf`. Imagens e gráficos vêm do pacote (`assets/images` e `assets/plots`) e também são copiados para `build/images` e `build/plots`.
 

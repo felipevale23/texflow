@@ -12,6 +12,7 @@ from configs.style import LOGO, LOGO_PALLET, STYLE
 from configs.version import __version__
 
 from .builder import build
+from .init import run_init
 from .updater import run_uninstall, run_update
 from .utils import is_tty
 
@@ -102,6 +103,12 @@ def cli():
         help="Remove o binário instalado do sistema."
     )
 
+    action_group.add_argument(
+        "--init",
+        action="store_true",
+        help="Cria .vscode/settings.json e extensions.json com a receita do LaTeX Workshop pro TexFlow."
+    )
+
     # Argumento opcional com flag curta e longa
     parser.add_argument(
         "-i", "--input",
@@ -128,7 +135,7 @@ def cli():
     parser.add_argument(
         "-y", "--yes",
         action="store_true",
-        help="Não pede confirmação (usar com --update/--uninstall)."
+        help="Não pede confirmação (usar com --update/--uninstall/--init)."
     )
     
     # 3. Faz o parsing dos argumentos da linha de comando
@@ -159,6 +166,9 @@ def cli():
 
         elif args.uninstall:
             run_uninstall(args.yes)
+
+        elif args.init:
+            run_init(args.yes)
 
         elif args.build and args.input:
             welcome()

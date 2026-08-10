@@ -1,0 +1,9 @@
+{
+    // Extensão necessária pra este workspace: mostra o preview do PDF,
+    // faz SyncTeX (forward/inverse search) e lê o painel de erros a
+    // partir do build/main.log gerado pelo TexFlow. O VS Code sugere a
+    // instalação automaticamente ao abrir esta pasta.
+    "recommendations": [
+        "James-Yu.latex-workshop"
+    ]
+}

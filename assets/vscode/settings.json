@@ -1,0 +1,101 @@
+{
+    // ------------------------------------------------------------------
+    // Onde o arquivo raiz do documento pode ser encontrado. Ajuste se o
+    // seu main.tex não estiver na raiz do workspace, ex.:
+    // "relatorio/main.tex".
+    // ------------------------------------------------------------------
+    "latex-workshop.latex.search.rootFiles.include": [
+        "main.tex"
+    ],
+
+    // Pasta onde os artefatos de build (PDF, .log, .aux, .synctex.gz...)
+    // são gerados. %DIR% é a pasta do arquivo raiz. O TexFlow sempre
+    // compila dentro de "<pasta_do_template>/build", então isso PRECISA
+    // continuar apontando pra "%DIR%/build/" pro LaTeX Workshop achar o
+    // PDF e o .log que o TexFlow gera (senão o preview e o painel de
+    // erros ficam sem nada pra ler).
+    "latex-workshop.latex.outDir": "%DIR%/build/",
+
+    // Cosmético: não mostra o caminho completo do rootfile na status bar.
+    "latex-workshop.latex.build.rootfileInStatus": false,
+
+    // Qual receita roda por padrão ao salvar (Ctrl+S) ou ao clicar em
+    // "Build LaTeX project". As receitas disponíveis estão definidas
+    // logo abaixo, em "latex-workshop.latex.recipes". Troque pro nome de
+    // outra receita se quiser usar pdflatex puro em vez do TexFlow.
+    "latex-workshop.latex.recipe.default": "TexFlow Build",
+
+    // Backend de citações usado pelo autocomplete/intellisense do editor.
+    // Troque pra "bibtex" se o seu template usar bibtex em vez de biblatex.
+    "latex-workshop.intellisense.citation.backend": "biblatex",
+
+    // ------------------------------------------------------------------
+    // Receitas: cada uma é uma sequência nomeada de "tools" (definidos
+    // em "latex-workshop.latex.tools", logo abaixo) que rodam em ordem.
+    // ------------------------------------------------------------------
+    "latex-workshop.latex.recipes": [
+        {
+            // Recomendada: chama o TexFlow, que renderiza o template
+            // Jinja2 com os dados do seu JSON e compila via latexmk.
+            "name": "TexFlow Build",
+            "tools": [
+                "texflow"
+            ]
+        },
+        {
+            // Alternativa, sem o TexFlow: compila um main.tex "puro"
+            // (sem placeholders Jinja2) diretamente com pdflatex/biber.
+            // Útil se você quiser testar o LaTeX isoladamente.
+            "name": "pdflatex -> biber -> pdflatex",
+            "tools": [
+                "pdflatex",
+                "biber",
+                "pdflatex"
+            ]
+        }
+    ],
+
+    // ------------------------------------------------------------------
+    // Tools: comandos individuais que as receitas acima encadeiam.
+    // ------------------------------------------------------------------
+    "latex-workshop.latex.tools": [
+        {
+            "name": "texflow",
+            "command": "texflow",
+            "args": [
+                "--build",
+                // Caminho do JSON de dados do template. Troque o nome do
+                // arquivo aqui se o seu não se chamar "input.json".
+                "--input",
+                "%DIR%/input.json",
+                // Pasta do template: por convenção, o mesmo diretório que
+                // contém o input.json e o main.tex (%DIR%). Se o seu
+                // template mora em outro lugar, troque "%DIR%" pelo
+                // caminho da pasta do template.
+                "--template",
+                "%DIR%"
+            ]
+        },
+        {
+            "name": "pdflatex",
+            "command": "pdflatex",
+            "args": [
+                "-synctex=1",
+                "-interaction=nonstopmode",
+                "-file-line-error",
+                "-output-directory=%OUTDIR%",
+                "%DOC%"
+            ],
+            "env": {}
+        },
+        {
+            "name": "biber",
+            "command": "biber",
+            "args": [
+                "--output-directory=%OUTDIR%",
+                "%DOCFILE%"
+            ],
+            "env": {}
+        }
+    ]
+}

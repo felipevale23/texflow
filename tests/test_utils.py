@@ -1,6 +1,6 @@
 import pytest
 
-from scripts.utils import debug, is_tty, is_writable, parse_money
+from scripts.utils import confirm, debug, is_tty, is_writable, parse_money
 
 
 @pytest.mark.parametrize(
@@ -45,6 +45,26 @@ def test_is_tty_reflects_stderr(monkeypatch):
 
     monkeypatch.setattr("sys.stderr.isatty", lambda: False)
     assert is_tty() is False
+
+
+def test_confirm_auto_yes_skips_prompt(monkeypatch):
+    monkeypatch.setattr("scripts.utils.is_tty", lambda: False)
+    assert confirm("Sobrescrever?", auto_yes=True) is True
+
+
+def test_confirm_non_tty_without_auto_yes_defaults_to_false(monkeypatch):
+    monkeypatch.setattr("scripts.utils.is_tty", lambda: False)
+    assert confirm("Sobrescrever?", auto_yes=False) is False
+
+
+@pytest.mark.parametrize(
+    ("answer", "expected"),
+    [("y", True), ("yes", True), ("s", True), ("sim", True), ("n", False), ("", False)],
+)
+def test_confirm_tty_reads_input(monkeypatch, answer, expected):
+    monkeypatch.setattr("scripts.utils.is_tty", lambda: True)
+    monkeypatch.setattr("builtins.input", lambda _prompt: answer)
+    assert confirm("Sobrescrever?", auto_yes=False) is expected
 
 
 def test_debug_prints_only_when_enabled(monkeypatch, capsys):

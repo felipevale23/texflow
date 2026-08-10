@@ -8,7 +8,7 @@ import urllib.request
 from pathlib import Path
 
 from configs.version import __version__
-from scripts.utils import is_tty
+from scripts.utils import confirm
 
 GITHUB_REPO = "felipevale23/texflow"
 GITHUB_API_LATEST = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
@@ -57,16 +57,6 @@ def _fetch_latest_release() -> dict:
         raise RuntimeError(f"Falha ao consultar releases no GitHub: {e}") from e
 
 
-def _confirm(prompt: str, auto_yes: bool) -> bool:
-    if auto_yes:
-        return True
-    if not is_tty():
-        print(f"{prompt} (rode novamente com -y/--yes para confirmar automaticamente)", file=sys.stderr)
-        return False
-    resposta = input(f"{prompt} [y/N] ").strip().lower()
-    return resposta in ("y", "yes", "s", "sim")
-
-
 def run_update(auto_yes: bool) -> None:
     if not is_frozen():
         print("Você está rodando o TexFlow a partir do código-fonte. Use `git pull && uv sync` para atualizar.")
@@ -84,7 +74,7 @@ def run_update(auto_yes: bool) -> None:
     if asset is None:
         raise RuntimeError(f"Nenhum binário publicado em {latest_tag} para esta plataforma ({asset_name}).")
 
-    if not _confirm(f"Atualizar TexFlow de {__version__} para {latest_tag}?", auto_yes):
+    if not confirm(f"Atualizar TexFlow de {__version__} para {latest_tag}?", auto_yes):
         return
 
     target = Path(sys.executable)
@@ -117,7 +107,7 @@ def run_uninstall(auto_yes: bool) -> None:
 
     target = Path(sys.executable)
 
-    if not _confirm(f"Remover {target}?", auto_yes):
+    if not confirm(f"Remover {target}?", auto_yes):
         return
 
     target.unlink()
