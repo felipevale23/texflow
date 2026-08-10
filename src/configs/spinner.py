@@ -1,7 +1,5 @@
 import sys
 
-from yaspin import yaspin
-
 from scripts.utils import is_tty
 
 
@@ -51,4 +49,10 @@ class DummySpinner:
 def spinner(*args, **kwargs):
     if not is_tty():
         return DummySpinner()
+
+    # Import tardio: yaspin não é necessário fora de TTY, e evitar importá-lo
+    # reduz o tempo de startup do processo — importante já que o VS Code
+    # LaTeX Workshop recria o processo Python a cada Ctrl+S.
+    from yaspin import yaspin
+
     return yaspin(*args, **kwargs)

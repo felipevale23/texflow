@@ -1,4 +1,3 @@
-import hashlib
 import importlib.resources as res
 import os
 import re
@@ -17,34 +16,8 @@ from classes.task import CopyTree, FnTask, RenderTemplate, Task
 from configs.paths import BUILD_DIR
 from configs.spinner import spinner
 from configs.style import STYLE
+from scripts.utils import is_tty
 
-
-def file_hash(path):
-    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
-
-def should_compile(tex_path):
-    cache = Path(".cache/main.hash")
-
-    files = [tex_path]
-
-    # inclui tudo que influencia
-    files += list(Path("data").glob("**/*.json"))
-    files += list(Path("template").glob("**/*.tex"))
-    
-    h = hashlib.sha256()
-    for f in files:
-        if f.exists():
-            h.update(f.read_bytes())
-
-    new = h.hexdigest()
-    old = cache.read_text() if cache.exists() else None
-
-    if new == old:
-        return False
-
-    cache.parent.mkdir(exist_ok=True)
-    cache.write_text(new)
-    return True
 
 def check_unresolved_placeholders(tex_file):
     """Verifica se ainda existem placeholders não resolvidos no arquivo .tex"""
@@ -65,12 +38,20 @@ def run_latex_command(emoji, cmd, cwd=None, env=None):
 
     if tex_file and tex_file.exists():
         check_unresolved_placeholders(tex_file)
-    
-    print_formatted_text(
-        HTML(f'<cmd> {emoji} </cmd> <sub-msg> Executando: {' '.join(cmd)} (cwd={cwd or os.getcwd()})" </sub-msg>'),
-        style=STYLE, 
-        file=sys.stderr
-    )
+
+    # Sem TTY (ex: chamado pelo LaTeX Workshop a cada Ctrl+S), o VS Code faz
+    # parsing por regex do stdout/stderr do build tool: sequências ANSI de
+    # estilo do prompt_toolkit corromperiam esse parsing, então usamos texto
+    # puro nesse caso.
+    if is_tty():
+        print_formatted_text(
+            HTML(f'<cmd> {emoji} </cmd> <sub-msg> Executando: {' '.join(cmd)} (cwd={cwd or os.getcwd()})" </sub-msg>'),
+            style=STYLE,
+            file=sys.stderr
+        )
+    else:
+        print(f"{emoji} Executando: {' '.join(cmd)} (cwd={cwd or os.getcwd()})", file=sys.stderr)
+        sys.stderr.flush()
 
     # cria log temporário
     # Garante que o diretório de log temporário exista e o arquivo seja gravado
@@ -78,6 +59,10 @@ def run_latex_command(emoji, cmd, cwd=None, env=None):
     debug_mode = os.getenv("TEXFLOW_DEBUG")
 
     # Execução do processo
+    # capture_output só intercepta o stdout/stderr do PROCESSO latexmk — o
+    # build/main.log continua sendo escrito em disco por ele normalmente
+    # (é isso que o LaTeX Workshop lê pra popular erros/SyncTeX), mesmo em
+    # caso de falha, então esse tratamento customizado não interfere nele.
     result = subprocess.run(
         cmd,
         cwd=cwd,
@@ -106,6 +91,7 @@ def run_latex_command(emoji, cmd, cwd=None, env=None):
             log_temp_path = f.name
 
         print(f"\n❌ Erro na execução! Log detalhado: {log_temp_path}", file=sys.stderr)
+        sys.stderr.flush()
 
         # 4. O RAISE: Passamos o resumo para a mensagem principal
         # Usamos 'from None' se não quiser o traceback do subprocess, 
@@ -123,9 +109,11 @@ def run_latex_command(emoji, cmd, cwd=None, env=None):
         print(result.stdout)
 
 def latexmk_build_process(build_dir: Path):
-    """if not should_compile(build_dir / "main.tex"):
-        print_formatted_text("⚡ Nada mudou, pulando compilação.", file=sys.stderr)
-        return"""
+    """Compila via latexmk, que decide sozinho (por mtime/dependência de cada
+    \\input, não um hash global) o que precisa ser reprocessado. Cache
+    incremental nativo dele vive em build/.fdb_latexmk e build/*.fls e não é
+    apagado entre builds — por isso RenderTemplate/CopyTree evitam tocar o
+    mtime de arquivos cujo conteúdo não mudou (ver classes/task.py)."""
 
     env = os.environ.copy()
 
@@ -136,6 +124,11 @@ def latexmk_build_process(build_dir: Path):
         "latexmk",
         "-xelatex",
         "-pdfxe",
+        # -f: continua processando mesmo se um passo (ex: uma xelatex run)
+        # reportar erro, pra maximizar o que fica atualizado e pra sempre
+        # gerar main.log/main.pdf parciais que o LaTeX Workshop possa ler.
+        # NÃO é o mesmo que -g (que força rebuild completo ignorando
+        # timestamps) — -f não invalida o cache incremental do latexmk.
         "-f",
         "-interaction=nonstopmode", # Evita travar pedindo input
         "-silent",                  # 🔥 Substitui o -quiet e silencia o log
@@ -306,14 +299,19 @@ def build(data_path: str, template_folder: str):
                 output=build_dir / "main.tex",
                 dependencies=[]
             )
+            # 🔥 symlink em vez de cópia física: são assets binários que
+            # raramente mudam entre builds, então não há por que duplicá-los
+            # em build/ a cada save.
             copy_images = CopyTree(
-                res.files('assets').joinpath('images'), 
-                build_dir / "images", 
+                res.files('assets').joinpath('images'),
+                build_dir / "images",
+                symlink=True,
                 dependencies = [render]
             )
             copy_plots  = CopyTree(
-                res.files('assets').joinpath('plots'), 
-                build_dir / "plots", 
+                res.files('assets').joinpath('plots'),
+                build_dir / "plots",
+                symlink=True,
                 dependencies = [render]
             )
             copy_files = CopyTree(
@@ -344,6 +342,10 @@ def build(data_path: str, template_folder: str):
         except Exception as e:  # noqa: BLE001 - error boundary do build, precisa reportar qualquer falha
 
             with sp.hidden():
-                print(FormattedText([("fg:#ff0000 bold", f"✖ Erro: {e}")]), style=STYLE, file=sys.stderr)
+                if is_tty():
+                    print(FormattedText([("fg:#ff0000 bold", f"✖ Erro: {e}")]), style=STYLE, file=sys.stderr)
+                else:
+                    print(f"✖ Erro: {e}", file=sys.stderr)
+                    sys.stderr.flush()
 
             sp.fail("🐛")

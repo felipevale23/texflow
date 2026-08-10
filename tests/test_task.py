@@ -1,3 +1,7 @@
+import os
+import time
+from pathlib import Path
+
 import pytest
 
 from classes import task as task_module
@@ -35,6 +39,38 @@ def test_render_template_writes_rendered_output(tmp_path):
     assert output.read_text(encoding="utf-8") == "Olá, Mundo!"
 
 
+def test_render_template_preserves_mtime_when_content_unchanged(tmp_path):
+    output = tmp_path / "out.tex"
+    render = RenderTemplate(
+        template=FakeTemplate("Olá, {name}!"),
+        context={"name": "Mundo"},
+        output=output,
+    )
+    render.run()
+    original_mtime = output.stat().st_mtime_ns
+
+    # Garante que o próximo write, se acontecer, teria um mtime diferente.
+    time.sleep(0.01)
+    render.run()
+
+    assert output.stat().st_mtime_ns == original_mtime
+
+
+def test_render_template_rewrites_when_content_changes(tmp_path):
+    output = tmp_path / "out.tex"
+    render = RenderTemplate(
+        template=FakeTemplate("Olá, {name}!"),
+        context={"name": "Mundo"},
+        output=output,
+    )
+    render.run()
+
+    render.context = {"name": "Outro"}
+    render.run()
+
+    assert output.read_text(encoding="utf-8") == "Olá, Outro!"
+
+
 def test_copy_tree_copies_single_file(tmp_path):
     src = tmp_path / "src.txt"
     src.write_text("conteúdo")
@@ -42,6 +78,116 @@ def test_copy_tree_copies_single_file(tmp_path):
 
     CopyTree(src=src, dst=dst).run()
 
+    assert dst.read_text(encoding="utf-8") == "conteúdo"
+
+
+def test_copy_tree_skips_write_when_content_unchanged(tmp_path):
+    src = tmp_path / "src.txt"
+    src.write_text("conteúdo")
+    dst = tmp_path / "dst" / "src.txt"
+
+    CopyTree(src=src, dst=dst).run()
+    original_mtime = dst.stat().st_mtime_ns
+
+    time.sleep(0.01)
+    CopyTree(src=src, dst=dst).run()
+
+    assert dst.stat().st_mtime_ns == original_mtime
+
+
+def test_copy_tree_rewrites_when_content_changes(tmp_path):
+    src = tmp_path / "src.txt"
+    src.write_text("conteúdo")
+    dst = tmp_path / "dst" / "src.txt"
+
+    CopyTree(src=src, dst=dst).run()
+
+    src.write_text("outro conteúdo")
+    CopyTree(src=src, dst=dst).run()
+
+    assert dst.read_text(encoding="utf-8") == "outro conteúdo"
+
+
+def test_copy_tree_directory_skips_unchanged_files(tmp_path):
+    src_dir = tmp_path / "src"
+    dst_dir = tmp_path / "dst"
+    src_dir.mkdir()
+    (src_dir / "keep.txt").write_text("mesmo conteúdo")
+
+    CopyTree(src=src_dir, dst=dst_dir).run()
+    original_mtime = (dst_dir / "keep.txt").stat().st_mtime_ns
+
+    time.sleep(0.01)
+    CopyTree(src=src_dir, dst=dst_dir).run()
+
+    assert (dst_dir / "keep.txt").stat().st_mtime_ns == original_mtime
+
+
+def test_copy_tree_symlink_mode_links_single_file(tmp_path):
+    src = tmp_path / "src.txt"
+    src.write_text("conteúdo")
+    dst = tmp_path / "dst" / "src.txt"
+
+    CopyTree(src=src, dst=dst, symlink=True).run()
+
+    assert dst.is_symlink()
+    assert dst.resolve() == src.resolve()
+    assert dst.read_text(encoding="utf-8") == "conteúdo"
+
+
+def test_copy_tree_symlink_mode_links_directory_contents(tmp_path):
+    src_dir = tmp_path / "src"
+    dst_dir = tmp_path / "dst"
+    src_dir.mkdir()
+    (src_dir / "image.png").write_text("dados binários")
+
+    CopyTree(src=src_dir, dst=dst_dir, symlink=True).run()
+
+    linked = dst_dir / "image.png"
+    assert linked.is_symlink()
+    assert linked.resolve() == (src_dir / "image.png").resolve()
+
+
+def test_copy_tree_symlink_mode_skips_when_already_linked(tmp_path):
+    src = tmp_path / "src.txt"
+    src.write_text("conteúdo")
+    dst = tmp_path / "dst" / "src.txt"
+
+    CopyTree(src=src, dst=dst, symlink=True).run()
+    original_target = os.readlink(dst)
+
+    CopyTree(src=src, dst=dst, symlink=True).run()
+
+    assert os.readlink(dst) == original_target
+
+
+def test_copy_tree_symlink_mode_replaces_stale_regular_file(tmp_path):
+    src = tmp_path / "src.txt"
+    src.write_text("conteúdo novo")
+    dst = tmp_path / "dst" / "src.txt"
+    dst.parent.mkdir(parents=True)
+    dst.write_text("conteúdo velho de uma cópia física antiga")
+
+    CopyTree(src=src, dst=dst, symlink=True).run()
+
+    assert dst.is_symlink()
+    assert dst.read_text(encoding="utf-8") == "conteúdo novo"
+
+
+def test_copy_tree_symlink_mode_falls_back_to_copy_when_unsupported(tmp_path, monkeypatch):
+    src = tmp_path / "src.txt"
+    src.write_text("conteúdo")
+    dst = tmp_path / "dst" / "src.txt"
+    dst.parent.mkdir(parents=True)
+
+    def boom(self, target):
+        raise OSError("symlink não suportado")
+
+    monkeypatch.setattr(Path, "symlink_to", boom)
+
+    CopyTree(src=src, dst=dst, symlink=True).run()
+
+    assert not dst.is_symlink()
     assert dst.read_text(encoding="utf-8") == "conteúdo"
 
 

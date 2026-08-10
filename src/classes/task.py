@@ -1,3 +1,4 @@
+import filecmp
 import shutil
 from abc import ABC, abstractmethod
 from collections.abc import Iterable
@@ -10,6 +11,48 @@ from configs.paths import BUILD_DIR
 Mode = Literal["thread", "process", "chain"]
 Dependencies = Iterable["Task"] | None
 Source = Path | Traversable
+
+
+def _same_content(src: Path, dst: Path) -> bool:
+    """True se dst existe, não é symlink, e tem o mesmo conteúdo de src."""
+    return dst.exists() and not dst.is_symlink() and filecmp.cmp(src, dst, shallow=False)
+
+
+def _copy_if_changed(src, dst) -> None:
+    """copy_function para shutil.copytree: pula arquivos com conteúdo idêntico.
+
+    Preserva o mtime do destino quando nada mudou, o que permite ao latexmk
+    confiar no próprio cache incremental (.fdb_latexmk/.fls) em vez de
+    reprocessar tudo a cada build.
+    """
+    src, dst = Path(src), Path(dst)
+    if _same_content(src, dst):
+        return
+    shutil.copy2(src, dst)
+
+
+def _symlink_or_copy(src, dst) -> None:
+    """copy_function para shutil.copytree: linka em vez de duplicar o arquivo.
+
+    Assets binários (imagens/plots) normalmente não mudam entre builds, então
+    um symlink evita cópia física redundante em build/. Se o destino já for
+    um symlink correto, não faz nada; se for um arquivo/symlink desatualizado,
+    recria; se o filesystem não suportar symlink (ex: Windows sem permissão),
+    cai de volta para cópia física.
+    """
+    src, dst = Path(src).resolve(), Path(dst)
+
+    if dst.is_symlink():
+        if dst.resolve() == src:
+            return
+        dst.unlink()
+    elif dst.exists():
+        dst.unlink()
+
+    try:
+        dst.symlink_to(src)
+    except OSError:
+        shutil.copy2(src, dst)
 
 
 class Task(ABC):
@@ -32,9 +75,16 @@ class Task(ABC):
     def runner(cls, tasks: list["Task"]):
         import time
 
-        from yaspin.spinners import Spinners
-
         from configs.spinner import spinner
+        from scripts.utils import is_tty
+
+        # yaspin.spinners só é usado para decorar o spinner interativo: sem
+        # TTY, spinner() devolve um DummySpinner que ignora esse argumento,
+        # então evitamos o import (e o custo de startup que ele traz) à toa.
+        dots = None
+        if is_tty():
+            from yaspin.spinners import Spinners
+            dots = Spinners.dots
 
         TASK_ICONS = {
             "clean-build": "🧹",
@@ -69,7 +119,7 @@ class Task(ABC):
 
                 start = time.perf_counter()
                 with spinner(
-                    Spinners.dots, text=f"{icon(t)} {t.name}", color="cyan"
+                    dots, text=f"{icon(t)} {t.name}", color="cyan"
                 ) as sp:
                     t.run()
                     end = time.perf_counter()
@@ -92,7 +142,7 @@ class Task(ABC):
                         start = time.perf_counter()
 
                         with spinner(
-                            Spinners.dots, text=f"{icon(t)} {t.name}", color="yellow"
+                            dots, text=f"{icon(t)} {t.name}", color="yellow"
                         ) as sp:
                             future.result()
                             end = time.perf_counter()
@@ -115,7 +165,7 @@ class Task(ABC):
                         start = time.perf_counter()
 
                         with spinner(
-                            Spinners.dots, text=f"{icon(t)} {t.name}", color="green"
+                            dots, text=f"{icon(t)} {t.name}", color="green"
                         ) as sp:
                             result.get()
                             end = time.perf_counter()
@@ -158,6 +208,13 @@ class RenderTemplate(Task):
 
     def run(self) -> None:
         rendered = self.template.render(**self.context)
+
+        # Preserva o mtime quando o conteúdo não mudou: o latexmk usa o mtime
+        # de main.tex pra decidir se precisa recompilar, e reescrever o
+        # arquivo sempre invalidaria o cache incremental dele à toa.
+        if self.output.exists() and self.output.read_text(encoding="utf-8") == rendered:
+            return
+
         self.output.write_text(rendered, encoding="utf-8")
 
 
@@ -170,6 +227,7 @@ class CopyTree(Task):
         dst: Path,
         ignore_tex=False,
         *,
+        symlink=False,
         mode: Mode = "thread",
         dependencies: Dependencies = None,
     ):
@@ -177,6 +235,8 @@ class CopyTree(Task):
         self.src = src
         self.dst = dst
         self.ignore_tex = ignore_tex
+        self.symlink = symlink
+        self.copy_fn = _symlink_or_copy if symlink else _copy_if_changed
 
     def run(self) -> None:
         # 1. Se a origem for um Path (caminho físico no disco - modo de desenvolvimento)
@@ -190,7 +250,7 @@ class CopyTree(Task):
                     return
                 # Certifica que o destino existe se for um arquivo
                 self.dst.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(self.src, self.dst)
+                self.copy_fn(self.src, self.dst)
                 return
 
             # 🔥 Arquivos .tex que DEVEM ser copiados mesmo com ignore_tex=True
@@ -238,13 +298,15 @@ class CopyTree(Task):
                     target = dst / item.name
 
                     if item.is_dir():
-                        shutil.copytree(item, target, dirs_exist_ok=True, ignore=ignore)
+                        shutil.copytree(
+                            item, target, dirs_exist_ok=True, ignore=ignore, copy_function=self.copy_fn
+                        )
                     else:
-                        shutil.copy2(item, target)
+                        self.copy_fn(item, target)
 
             # 🚀 CASO NORMAL
             else:
-                shutil.copytree(src, dst, dirs_exist_ok=True, ignore=ignore)
+                shutil.copytree(src, dst, dirs_exist_ok=True, ignore=ignore, copy_function=self.copy_fn)
 
         # 2. Se a origem for um objeto Traversable não-Path (recurso empacotado)
         elif isinstance(self.src, Traversable):
@@ -272,8 +334,7 @@ class CopyTree(Task):
                 if self.ignore_tex and item.name.endswith(".tex"):
                     continue
 
-                with item.open("rb") as src_file, item_dst.open("wb") as dst_file:
-                    shutil.copyfileobj(src_file, dst_file)
+                self._copy_traversable_file(item, item_dst)
 
             elif item.is_dir():
                 # CHAVE: Criar uma nova instância de CopyTree para o subdiretório
@@ -285,11 +346,27 @@ class CopyTree(Task):
 
                 # Se for para execução síncrona/imediata (melhor para recursão):
                 new_copy_task = CopyTree(
-                    src=item, dst=item_dst, ignore_tex=self.ignore_tex, mode="chain"
+                    src=item, dst=item_dst, ignore_tex=self.ignore_tex, symlink=self.symlink, mode="chain"
                 )
 
                 # Executa a nova sub-tarefa imediatamente
                 new_copy_task.run()
+
+    def _copy_traversable_file(self, item: Traversable, item_dst: Path) -> None:
+        # Recursos empacotados sem zip (instalação editável, PyInstaller
+        # extraído) são, na prática, PosixPath de verdade: nesse caso
+        # reaproveitamos a mesma lógica de symlink/skip-se-igual do Path.
+        if isinstance(item, Path):
+            self.copy_fn(item, item_dst)
+            return
+
+        # Fallback genérico (ex: recurso dentro de um zip): sem filesystem
+        # real de origem não há como symlinkar, então só evitamos reescrever
+        # se o conteúdo já for idêntico.
+        data = item.read_bytes()
+        if item_dst.exists() and not item_dst.is_symlink() and item_dst.read_bytes() == data:
+            return
+        item_dst.write_bytes(data)
 
 
 class FnTask(Task):
