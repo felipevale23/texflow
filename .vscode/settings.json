@@ -10,6 +10,7 @@
         // (in this file you may have also configured outdir, recipes and tools)
         "latex-workshop.latex.outDir": "%DIR%/build/",
         "latex-workshop.latex.build.rootfileInStatus": false,
+        "latex-workshop.latex.recipe.default": "TexFlow Build",
         "latex-workshop.latex.recipes": [
             {
                 "name": "pdflatex -> biber -> pdflatex",
@@ -33,7 +34,9 @@
                 "args": [
                     "--build",
                     "--input",
-                    "%DIR%/input.json"
+                    "%DIR%/input.json",
+                    "--template",
+                    "%DIR%"
                 ]
             },
             {
