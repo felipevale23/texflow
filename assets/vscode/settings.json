@@ -19,11 +19,20 @@
     // Cosmético: não mostra o caminho completo do rootfile na status bar.
     "latex-workshop.latex.build.rootfileInStatus": false,
 
-    // Qual receita roda por padrão ao salvar (Ctrl+S) ou ao clicar em
-    // "Build LaTeX project". As receitas disponíveis estão definidas
-    // logo abaixo, em "latex-workshop.latex.recipes". Troque pro nome de
-    // outra receita se quiser usar pdflatex puro em vez do TexFlow.
+    // Qual receita roda ao clicar em "Build LaTeX project" (Ctrl+Alt+B).
+    // As receitas disponíveis estão definidas logo abaixo, em
+    // "latex-workshop.latex.recipes". Troque pro nome de outra receita
+    // se quiser usar pdflatex puro em vez do TexFlow.
     "latex-workshop.latex.recipe.default": "TexFlow Build",
+
+    // O rebuild automático ao salvar é feito pelo RunOnSave (bloco
+    // "emeraldwalk.runonsave" no fim deste arquivo), não pelo
+    // build-on-save nativo do LaTeX Workshop. Motivo: o main.tex puxa os
+    // parciais e o layout por tags Jinja "<<% include %>>" (exigência do
+    // TexFlow), não por \input real, então o LaTeX Workshop não enxerga
+    // essas dependências e só rebuildaria ao salvar o próprio main.tex.
+    // Desligar o autobuild nativo também evita build duplicado.
+    "latex-workshop.latex.autoBuild.run": "never",
 
     // Backend de citações usado pelo autocomplete/intellisense do editor.
     // Troque pra "bibtex" se o seu template usar bibtex em vez de biblatex.
@@ -97,5 +106,30 @@
             ],
             "env": {}
         }
-    ]
+    ],
+
+    // ------------------------------------------------------------------
+    // Rebuild automático ao salvar QUALQUER .tex.
+    //
+    // Necessário porque o main.tex puxa os parciais (src/**) e o
+    // layout.tex por tags Jinja "<<% include %>>", exigência do TexFlow,
+    // e não por \input real. O build-on-save nativo do LaTeX Workshop só
+    // segue dependências via \input, então NÃO dispara ao salvar um
+    // arquivo de src/** nem o layout.tex — só ao salvar o próprio
+    // main.tex. Esta regra do RunOnSave cobre a lacuna; o autobuild
+    // nativo fica desligado logo acima pra não duplicar.
+    //
+    // Requer a extensão "emeraldwalk.RunOnSave" (ver extensions.json).
+    // O comando roda na raiz do workspace: abra a pasta do template
+    // (a que contém input.json e main.tex) como pasta do VS Code.
+    // ------------------------------------------------------------------
+    "emeraldwalk.runonsave": {
+        "commands": [
+            {
+                "match": "\\.tex$",
+                "isAsync": false,
+                "cmd": "texflow --build --input input.json --template ."
+            }
+        ]
+    }
 }

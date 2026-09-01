@@ -49,6 +49,35 @@ def test_run_init_recommends_latex_workshop_extension(tmp_path, monkeypatch):
     assert "James-Yu.latex-workshop" in data["recommendations"]
 
 
+def test_run_init_recommends_run_on_save_extension(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+
+    run_init(auto_yes=True)
+
+    content = (tmp_path / ".vscode" / "extensions.json").read_text(encoding="utf-8")
+    data = json.loads(_strip_jsonc_comments(content))
+    assert "emeraldwalk.RunOnSave" in data["recommendations"]
+
+
+def test_run_init_settings_configure_rebuild_on_save(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+
+    run_init(auto_yes=True)
+
+    content = (tmp_path / ".vscode" / "settings.json").read_text(encoding="utf-8")
+    data = json.loads(_strip_jsonc_comments(content))
+
+    # RunOnSave rebuilda qualquer .tex chamando "texflow --build"...
+    commands = data["emeraldwalk.runonsave"]["commands"]
+    assert any(
+        c["match"] == r"\.tex$" and "texflow" in c["cmd"] and "--build" in c["cmd"]
+        for c in commands
+    )
+    # ...e o build-on-save nativo do LaTeX Workshop fica desligado pra não
+    # duplicar (ele não enxergaria os includes Jinja de qualquer forma).
+    assert data["latex-workshop.latex.autoBuild.run"] == "never"
+
+
 def test_run_init_does_not_overwrite_without_confirmation(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     vscode_dir = tmp_path / ".vscode"
