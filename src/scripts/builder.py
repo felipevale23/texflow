@@ -1,9 +1,11 @@
 import importlib.resources as res
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from collections import OrderedDict
 from pathlib import Path
 
@@ -57,6 +59,7 @@ def run_latex_command(emoji, cmd, cwd=None, env=None):
     # Garante que o diretório de log temporário exista e o arquivo seja gravado
     log_temp_path = None
     debug_mode = os.getenv("TEXFLOW_DEBUG")
+    started_at = time.time()
 
     # Execução do processo
     # capture_output só intercepta o stdout/stderr do PROCESSO latexmk — o
@@ -74,8 +77,15 @@ def run_latex_command(emoji, cmd, cwd=None, env=None):
 
     if result.returncode != 0:
         # 1. Tenta extrair um resumo útil
-        # O LaTeX costuma colocar o erro no stdout, não no stderr
-        summary = summarize_latex_log(result.stdout)
+        # O LaTeX costuma colocar o erro no stdout; o Tectonic reporta no
+        # stderr ("error: main.tex:5: ..."); e com latexmk -silent o stdout
+        # vem quase vazio, então o main.log gerado NESTE build (mtime >=
+        # início, pra não ler um log velho) também entra na análise.
+        main_log = ""
+        log_file = tex_file.with_suffix(".log") if tex_file else None
+        if log_file and log_file.exists() and log_file.stat().st_mtime >= started_at:
+            main_log = log_file.read_text(encoding="utf-8", errors="replace")
+        summary = summarize_latex_log(result.stdout + "\n" + main_log, result.stderr)
         
         # 2. Se o resumo for vazio, tenta pegar as últimas linhas do stdout
         if not summary.strip():
@@ -166,10 +176,69 @@ def xelatex_build_process():
         print("O processo de compilação foi interrompido.", file=sys.stderr)
         sys.exit(1)
 
+TECTONIC_BIN = "tectonic.exe" if os.name == "nt" else "tectonic"
+
+
+def resolve_tectonic() -> str:
+    """Localiza o binário do Tectonic, nesta ordem:
+
+    1. env TEXFLOW_TECTONIC (caminho explícito; se apontar pra algo que não
+       existe é erro, não fallback silencioso);
+    2. binário empacotado junto do TexFlow: sys._MEIPASS (PyInstaller
+       --onefile extrai o --add-binary lá) ou a pasta do sys.executable;
+    3. `tectonic` no PATH.
+    """
+    explicit = os.getenv("TEXFLOW_TECTONIC")
+    if explicit:
+        if Path(explicit).is_file():
+            return explicit
+        raise FileNotFoundError(f"TEXFLOW_TECTONIC aponta para {explicit}, que não existe.")
+
+    bundled_dirs = [getattr(sys, "_MEIPASS", None), Path(sys.executable).parent]
+    for d in bundled_dirs:
+        if d and (Path(d) / TECTONIC_BIN).is_file():
+            return str(Path(d) / TECTONIC_BIN)
+
+    on_path = shutil.which("tectonic")
+    if on_path:
+        return on_path
+
+    raise FileNotFoundError(
+        "Tectonic não encontrado. Instale (https://tectonic-typesetting.github.io), "
+        "aponte TEXFLOW_TECTONIC para o binário, ou use --engine latexmk."
+    )
+
+def tectonic_build_process(build_dir: Path):
+    """Compila via Tectonic: engine XeTeX autocontido que baixa os pacotes
+    sob demanda (precisa de rede só na primeira vez, depois fica em cache) e
+    decide sozinho quantas passadas/biber rodar. Gera main.pdf, main.log e
+    main.synctex.gz no build_dir, igual ao latexmk, pro LaTeX Workshop."""
+
+    env = os.environ.copy()
+    env["TEXINPUTS"] = f"{build_dir}{os.pathsep}{env.get('TEXINPUTS','')}"
+
+    cmd = [
+        resolve_tectonic(),
+        "-X", "compile",
+        "main.tex",
+        "--synctex",
+        "--keep-logs",
+        # .aux/.bcf/.bbl ficam em build/: o LaTeX Workshop e o próximo
+        # build reaproveitam, e dá pra inspecionar o .bcf se o biber falhar.
+        "--keep-intermediates",
+        "--outdir", ".",
+    ]
+
+    if os.getenv("TEXFLOW_DEBUG"):
+        cmd.append("--print")
+
+    run_latex_command("🦀", cmd, cwd=str(build_dir), env=env)
+
 # Engines de compilação disponíveis: nome (valor de --engine/TEXFLOW_ENGINE)
 # -> função que recebe o build_dir e compila build_dir/main.tex.
 ENGINES = {
     "latexmk": latexmk_build_process,
+    "tectonic": tectonic_build_process,
 }
 DEFAULT_ENGINE = "latexmk"
 
@@ -186,6 +255,21 @@ def resolve_engine(cli_engine: str | None = None) -> str:
 def summarize_latex_log(stdout: str, stderr: str | None = None, max_examples: int = 6) -> str:
     s = (stdout or "") + ("\n" + stderr if stderr else "")
     s.splitlines()
+
+    # 0) Erros no formato file:line:msg — "./main.tex:5: ..." no log do
+    # latexmk (-file-line-error) e "error: main.tex:5: ..." no stderr do
+    # Tectonic. Linhas "warning: ..." do Tectonic ficam de fora.
+    file_errors = []
+    seen = set()
+    for m in re.finditer(
+        r'(?m)^(?:error: )?(?:\./)?([^\s:][^:\n]*?\.(?:tex|sty|cls|bib|bbl|def)):(\d+): (.+)$', s
+    ):
+        file, ln, msg = m.group(1), m.group(2), m.group(3).strip()
+        key = (file, ln, msg.rstrip("."))
+        if key not in seen:
+            seen.add(key)
+            file_errors.append({'file': file, 'line': ln, 'msg': msg})
+    file_error_lines = {e['line'] for e in file_errors}
 
     # 1) Erros LaTeX (linhas que começam com "!")
     errors = []
@@ -204,6 +288,9 @@ def summarize_latex_log(stdout: str, stderr: str | None = None, max_examples: in
                 ln, snippet = None, ""
         else:
             ln, snippet = lm.group(1), lm.group(2).strip()
+        # mesmo erro já reportado no formato file:line (log + stderr)
+        if ln in file_error_lines:
+            continue
         errors.append({'msg': msg, 'line': ln, 'snippet': snippet})
     # 2) Placeholders <<...>>
     placeholders = re.findall(r'<<\s*([^<>]+?)\s*>>', s)
@@ -212,23 +299,41 @@ def summarize_latex_log(stdout: str, stderr: str | None = None, max_examples: in
     # 3) Missing characters
     missing_chars = re.findall(r'Missing character: There is no (.+?) in font (.+?)!', s)
     # 4) Citations undefined
-    cites = re.findall(r"LaTeX Warning: Citation '([^']+)' .*undefined(?: on input line (\d+))?", s)
+    cites = re.findall(r"LaTeX Warning: Citation [`']([^'\n]+)' .*undefined(?: on input line (\d+))?", s)
     cite_keys = list(OrderedDict.fromkeys([c[0] for c in cites]))
     # 5) References undefined
-    refs = re.findall(r"LaTeX Warning: Reference `([^`]+)' .* undefined(?: on input line (\d+))?", s)
+    refs = re.findall(r"LaTeX Warning: Reference [`']([^'\n]+)' .* undefined(?: on input line (\d+))?", s)
     ref_keys = list(OrderedDict.fromkeys([r[0] for r in refs]))
     # 6) No .bbl / empty bibliography / biblatex asks to run Biber
-    no_bbl = re.findall(r'No file ([\w\./-]+)\.', s)
+    no_bbl = list(OrderedDict.fromkeys(re.findall(r'No file ([\w\./-]+)\.', s)))
     empty_bib = 'LaTeX Warning: Empty bibliography' in s
     ask_biber = 'Please (re)run Biber' in s or 'Please (re)run Biber' in s or 'Please (re)run Biber' in s
+    # 6b) biber incompatível com o biblatex (comum no Tectonic: o bundle traz
+    # um biblatex fixo e chama o biber do sistema, que pode ser de outra versão)
+    biber_mismatch = re.search(
+        r'Found biblatex control file version (\d+(?:\.\d+)*), expected version (\d+(?:\.\d+)*)', s
+    )
+    # 6c) Erros do próprio Tectonic sem file:line (download, ferramenta externa...)
+    tectonic_errors = [
+        e.strip() for e in re.findall(r'(?m)^error: (?![^\s:]+:\d+: )(.+)$', s)
+        if not e.rstrip().endswith(":")
+    ]
+    tectonic_errors = list(OrderedDict.fromkeys(tectonic_errors))
     # 7) Overfull boxes
     overfull = re.findall(r'Overfull \\hbox.*', s)
     # 8) Output written
     out_written = re.search(r'Output written on (.+?) \((\d+) pages\)\.', s)
 
     parts = []
-    if errors:
+    if file_errors:
+        # Formato "arquivo:linha: mensagem" de propósito: é o que o
+        # problemMatcher da task "TexFlow Watch" do VS Code reconhece.
         parts.append("Erros LaTeX (primeiros):")
+        for e in file_errors[:max_examples]:
+            parts.append(f" • {e['file']}:{e['line']}: {e['msg']}")
+    if errors:
+        if not file_errors:
+            parts.append("Erros LaTeX (primeiros):")
         for e in errors[:max_examples]:
             if e['line']:
                 parts.append(f" • linha {e['line']}: {e['msg']}  — trecho: {e['snippet']!s}")
@@ -256,8 +361,21 @@ def summarize_latex_log(stdout: str, stderr: str | None = None, max_examples: in
         parts.append(f"Aviso: arquivo(s) de bibliografia ausente(s): {', '.join(no_bbl[:max_examples])}")
     if empty_bib:
         parts.append("Bibliografia vazia.")
-    if ask_biber:
+    if ask_biber and not biber_mismatch:
         parts.append("biblatex pede: rodar `biber output` e recompilar (biber + 2x xelatex).")
+    if biber_mismatch:
+        parts.append(
+            f"biber incompatível com o biblatex: o .bcf é versão {biber_mismatch.group(1)}, "
+            f"mas o biber instalado espera {biber_mismatch.group(2)}."
+        )
+        parts.append(
+            " • Com Tectonic, instale o biber que casa com o biblatex do bundle "
+            "(ver a tabela de compatibilidade na doc do biber) ou use --engine latexmk."
+        )
+    elif tectonic_errors:
+        parts.append("Erros do Tectonic:")
+        for e in tectonic_errors[:max_examples]:
+            parts.append(f" • {e}")
     if overfull:
         parts.append(f"Overfull \\hbox: {len(overfull)} ocorrência(s) (avisos de layout).")
     if out_written:
