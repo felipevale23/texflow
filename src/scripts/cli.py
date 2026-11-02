@@ -107,7 +107,8 @@ def cli():
     action_group.add_argument(
         "--init",
         action="store_true",
-        help="Cria .vscode/settings.json e extensions.json com a receita do LaTeX Workshop pro TexFlow."
+        help="Cria .vscode/settings.json e extensions.json com a receita do LaTeX Workshop pro TexFlow "
+             "(com --engine tectonic: usa o Tectonic; com --watch: task 'TexFlow Watch' em vez do RunOnSave)."
     )
 
     # Argumento opcional com flag curta e longa
@@ -137,7 +138,8 @@ def cli():
     parser.add_argument(
         "-w", "--watch",
         action="store_true",
-        help="Com --build: refaz o build a cada mudança no JSON, no template ou nos assets (Ctrl+C sai)."
+        help="Com --build: refaz o build a cada mudança no JSON, no template ou nos assets (Ctrl+C sai). "
+             "Com --init: gera a task 'TexFlow Watch' (.vscode/tasks.json) em vez do RunOnSave."
     )
 
     parser.add_argument(
@@ -182,7 +184,7 @@ def cli():
             run_uninstall(args.yes)
 
         elif args.init:
-            run_init(args.yes)
+            run_init(args.yes, resolve_engine(args.engine), args.watch)
 
         elif args.build and args.input:
             engine = resolve_engine(args.engine)

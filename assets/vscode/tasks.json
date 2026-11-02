@@ -1,0 +1,59 @@
+{
+    // Gerado por "texflow --init --watch": alternativa ao RunOnSave que
+    // deixa o TexFlow rodando em modo --watch, rebuildando a cada
+    // mudança no input.json, no template (main.tex, parciais, .sty,
+    // .bib...) e nos assets.
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "TexFlow Watch",
+            "type": "shell",
+            "command": "texflow",
+            // Roda na raiz do workspace: abra a pasta do template (a que
+            // contém input.json e main.tex) como pasta do VS Code.
+            "args": [
+                "--build",
+                "--watch",
+                "--input",
+                "input.json",
+                "--template",
+                "."
+            ],
+            // Fica rodando em segundo plano; o problemMatcher abaixo diz
+            // ao VS Code quando cada build começa e termina.
+            "isBackground": true,
+            // Inicia sozinha ao abrir a pasta. Na primeira vez o VS Code
+            // pergunta se pode rodar tasks automáticas ("Allow Automatic
+            // Tasks"); dá pra iniciar à mão em "Tasks: Run Task".
+            "runOptions": {
+                "runOn": "folderOpen"
+            },
+            "presentation": {
+                "reveal": "silent",
+                "panel": "dedicated"
+            },
+            // Joga os erros do resumo do TexFlow ("• main.tex:12: msg")
+            // no painel Problems, apontando pro build/main.tex renderizado.
+            "problemMatcher": {
+                "owner": "texflow",
+                "source": "texflow",
+                "severity": "error",
+                "fileLocation": [
+                    "autoDetect",
+                    "${workspaceFolder}/build"
+                ],
+                "pattern": {
+                    "regexp": "^\\s*•\\s+(?:\\./)?(.+?):(\\d+):\\s+(.*)$",
+                    "file": 1,
+                    "line": 2,
+                    "message": 3
+                },
+                "background": {
+                    "activeAtBeginning": true,
+                    "beginsPattern": "^\\[texflow\\] build iniciado",
+                    "endsPattern": "^\\[texflow\\] build (concluído|falhou)"
+                }
+            }
+        }
+    ]
+}

@@ -67,10 +67,10 @@ def test_run_init_settings_configure_rebuild_on_save(tmp_path, monkeypatch):
     content = (tmp_path / ".vscode" / "settings.json").read_text(encoding="utf-8")
     data = json.loads(_strip_jsonc_comments(content))
 
-    # RunOnSave rebuilda qualquer .tex chamando "texflow --build"...
+    # RunOnSave rebuilda qualquer .tex (e JSON/.sty/.cls/.bib) chamando "texflow --build"...
     commands = data["emeraldwalk.runonsave"]["commands"]
     assert any(
-        c["match"] == r"\.tex$" and "texflow" in c["cmd"] and "--build" in c["cmd"]
+        c["match"] == r"\.(tex|json|sty|cls|bib)$" and "texflow" in c["cmd"] and "--build" in c["cmd"]
         for c in commands
     )
     # ...e o build-on-save nativo do LaTeX Workshop fica desligado pra não

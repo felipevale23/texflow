@@ -22,12 +22,15 @@
     // Qual receita roda ao clicar em "Build LaTeX project" (Ctrl+Alt+B).
     // As receitas disponíveis estão definidas logo abaixo, em
     // "latex-workshop.latex.recipes". Troque pro nome de outra receita
-    // se quiser usar pdflatex puro em vez do TexFlow.
+    // se quiser usar pdflatex puro em vez do TexFlow, ou pra
+    // "TexFlow Build (Tectonic)" pra compilar com o Tectonic (o
+    // "texflow --init --engine tectonic" já gera assim).
     "latex-workshop.latex.recipe.default": "TexFlow Build",
 
     // O rebuild automático ao salvar é feito pelo RunOnSave (bloco
-    // "emeraldwalk.runonsave" no fim deste arquivo), não pelo
-    // build-on-save nativo do LaTeX Workshop. Motivo: o main.tex puxa os
+    // "emeraldwalk.runonsave" no fim deste arquivo) ou, se gerado com
+    // "texflow --init --watch", pela task "TexFlow Watch" em
+    // .vscode/tasks.json — não pelo build-on-save nativo do LaTeX Workshop. Motivo: o main.tex puxa os
     // parciais e o layout por tags Jinja "<<% include %>>" (exigência do
     // TexFlow), não por \input real, então o LaTeX Workshop não enxerga
     // essas dependências e só rebuildaria ao salvar o próprio main.tex.
@@ -49,6 +52,15 @@
             "name": "TexFlow Build",
             "tools": [
                 "texflow"
+            ]
+        },
+        {
+            // Igual à anterior, mas compila com o Tectonic: não precisa
+            // de TeX Live (baixa os pacotes na primeira vez e guarda em
+            // cache). Ver o aviso sobre o biber no README.
+            "name": "TexFlow Build (Tectonic)",
+            "tools": [
+                "texflow-tectonic"
             ]
         },
         {
@@ -86,6 +98,20 @@
             ]
         },
         {
+            // Mesmos argumentos do "texflow" acima, com --engine tectonic.
+            "name": "texflow-tectonic",
+            "command": "texflow",
+            "args": [
+                "--build",
+                "--engine",
+                "tectonic",
+                "--input",
+                "%DIR%/input.json",
+                "--template",
+                "%DIR%"
+            ]
+        },
+        {
             "name": "pdflatex",
             "command": "pdflatex",
             "args": [
@@ -109,7 +135,9 @@
     ],
 
     // ------------------------------------------------------------------
-    // Rebuild automático ao salvar QUALQUER .tex.
+    // Rebuild automático ao salvar QUALQUER .tex — e também o JSON de
+    // dados e os .sty/.cls/.bib do template, que mudam o PDF tanto
+    // quanto um parcial.
     //
     // Necessário porque o main.tex puxa os parciais (src/**) e o
     // layout.tex por tags Jinja "<<% include %>>", exigência do TexFlow,
@@ -122,11 +150,15 @@
     // Requer a extensão "emeraldwalk.RunOnSave" (ver extensions.json).
     // O comando roda na raiz do workspace: abra a pasta do template
     // (a que contém input.json e main.tex) como pasta do VS Code.
+    //
+    // Alternativa: "texflow --init --watch" troca este bloco pela task
+    // "TexFlow Watch" (.vscode/tasks.json), que deixa o TexFlow rodando
+    // em modo --watch e dispensa a extensão RunOnSave.
     // ------------------------------------------------------------------
     "emeraldwalk.runonsave": {
         "commands": [
             {
-                "match": "\\.tex$",
+                "match": "\\.(tex|json|sty|cls|bib)$",
                 "isAsync": false,
                 "cmd": "texflow --build --input input.json --template ."
             }
