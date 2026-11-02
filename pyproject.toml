@@ -57,6 +57,11 @@ packages = ["assets", "classes", "configs", "scripts"]
 [tool.setuptools.dynamic]
 version = { attr = "configs.version.__version__" }
 
+[tool.pytest.ini_options]
+markers = [
+    "slow: testes de integração lentos (compilam de verdade; pulados se a ferramenta não estiver instalada)",
+]
+
 [project.urls]
 Repository = "https://github.com/felipevale23/texflow"
 
