@@ -403,10 +403,11 @@ def _jinja_env(template_arg: str) -> Environment:
     else:
         raise FileNotFoundError("Default template não encontrado.\n")
 
-def build(data_path: str, template_folder: str, engine: str = DEFAULT_ENGINE):
+def build(data_path: str, template_folder: str, engine: str = DEFAULT_ENGINE) -> bool:
     """
     Cria o arquivo .tex com as variáveis passadas e compila com o engine
-    escolhido (ver ENGINES).
+    escolhido (ver ENGINES). Retorna True se o build deu certo — erros são
+    reportados aqui mesmo e não propagam (o modo --watch depende disso).
     """
     
     print = print_formatted_text
@@ -474,6 +475,7 @@ def build(data_path: str, template_folder: str, engine: str = DEFAULT_ENGINE):
             Task.runner(tasks)
             
             sp.ok("✨ Compilação do documento concluída com sucesso! ✨")
+            return True
         
         except Exception as e:  # noqa: BLE001 - error boundary do build, precisa reportar qualquer falha
 
@@ -485,3 +487,4 @@ def build(data_path: str, template_folder: str, engine: str = DEFAULT_ENGINE):
                     sys.stderr.flush()
 
             sp.fail("🐛")
+            return False

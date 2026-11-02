@@ -15,6 +15,7 @@ from .builder import ENGINES, build, resolve_engine
 from .init import run_init
 from .updater import run_uninstall, run_update
 from .utils import is_tty
+from .watcher import watch
 
 # override print with feature-rich ``print_formatted_text`` from prompt_toolkit
 print = print_formatted_text
@@ -134,6 +135,12 @@ def cli():
     )
 
     parser.add_argument(
+        "-w", "--watch",
+        action="store_true",
+        help="Com --build: refaz o build a cada mudança no JSON, no template ou nos assets (Ctrl+C sai)."
+    )
+
+    parser.add_argument(
         "--debug",
         action="store_true",
         help="Mostra logs detalhados"
@@ -180,7 +187,10 @@ def cli():
         elif args.build and args.input:
             engine = resolve_engine(args.engine)
             welcome()
-            build(args.input, args.template, engine)
+            if args.watch:
+                watch(args.input, args.template, engine)
+            else:
+                build(args.input, args.template, engine)
 
         else:
             raise UsageError("[❌]\n")
