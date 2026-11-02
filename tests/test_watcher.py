@@ -145,3 +145,13 @@ def test_filter_ignores_build_output_and_vscode(tmp_path):
     assert not f(Change.added, str(template_dir / "build" / "images" / "a.png"))
     assert not f(Change.modified, str(template_dir / ".vscode" / "settings.json"))
     assert not f(Change.modified, str(template_dir / ".main.tex.swp"))
+
+
+def test_watch_paths_skip_assets_in_frozen_binary(tmp_path, monkeypatch):
+    data, template_dir = _template(tmp_path)
+    assets = tmp_path / "assets"
+    (assets / "images").mkdir(parents=True)
+    monkeypatch.setattr(watcher.res, "files", lambda _pkg: assets)
+    monkeypatch.setattr(watcher.sys, "frozen", True, raising=False)
+
+    assert watch_paths(data, template_dir) == [template_dir]

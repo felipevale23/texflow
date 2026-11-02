@@ -36,6 +36,9 @@ def watch_paths(data_path: Path, template_dir: Path) -> list[Path]:
     if not data_path.is_relative_to(template_dir):
         paths.append(data_path)
 
+    if getattr(sys, "frozen", False):
+        return paths
+
     for name in ("images", "plots"):
         asset = res.files("assets").joinpath(name)
         if isinstance(asset, Path) and asset.is_dir():
