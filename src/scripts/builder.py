@@ -166,6 +166,23 @@ def xelatex_build_process():
         print("O processo de compilação foi interrompido.", file=sys.stderr)
         sys.exit(1)
 
+# Engines de compilação disponíveis: nome (valor de --engine/TEXFLOW_ENGINE)
+# -> função que recebe o build_dir e compila build_dir/main.tex.
+ENGINES = {
+    "latexmk": latexmk_build_process,
+}
+DEFAULT_ENGINE = "latexmk"
+
+
+def resolve_engine(cli_engine: str | None = None) -> str:
+    """Decide o engine: flag --engine > env TEXFLOW_ENGINE > padrão (latexmk)."""
+    engine = cli_engine or os.getenv("TEXFLOW_ENGINE") or DEFAULT_ENGINE
+    if engine not in ENGINES:
+        raise ValueError(
+            f"Engine desconhecido: {engine!r}. Opções: {', '.join(sorted(ENGINES))}."
+        )
+    return engine
+
 def summarize_latex_log(stdout: str, stderr: str | None = None, max_examples: int = 6) -> str:
     s = (stdout or "") + ("\n" + stderr if stderr else "")
     s.splitlines()
@@ -268,9 +285,10 @@ def _jinja_env(template_arg: str) -> Environment:
     else:
         raise FileNotFoundError("Default template não encontrado.\n")
 
-def build(data_path: str, template_folder: str):
+def build(data_path: str, template_folder: str, engine: str = DEFAULT_ENGINE):
     """
-    Cria o arquivo .tex com as variáveis passadas
+    Cria o arquivo .tex com as variáveis passadas e compila com o engine
+    escolhido (ver ENGINES).
     """
     
     print = print_formatted_text
@@ -322,7 +340,7 @@ def build(data_path: str, template_folder: str):
             )
 
             compile_pdf = FnTask(
-                latexmk_build_process,
+                ENGINES[engine],
                 build_dir,
                 mode="chain",
                 dependencies=[render, copy_images, copy_plots, copy_files]

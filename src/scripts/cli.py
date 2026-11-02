@@ -11,7 +11,7 @@ from configs.spinner import spinner
 from configs.style import LOGO, LOGO_PALLET, STYLE
 from configs.version import __version__
 
-from .builder import build
+from .builder import ENGINES, build, resolve_engine
 from .init import run_init
 from .updater import run_uninstall, run_update
 from .utils import is_tty
@@ -127,6 +127,13 @@ def cli():
     )
 
     parser.add_argument(
+        "--engine",
+        choices=sorted(ENGINES),
+        default=None,
+        help="Engine de compilação (padrão: latexmk). Também lido da env TEXFLOW_ENGINE; a flag tem prioridade."
+    )
+
+    parser.add_argument(
         "--debug",
         action="store_true",
         help="Mostra logs detalhados"
@@ -171,8 +178,9 @@ def cli():
             run_init(args.yes)
 
         elif args.build and args.input:
+            engine = resolve_engine(args.engine)
             welcome()
-            build(args.input, args.template)
+            build(args.input, args.template, engine)
 
         else:
             raise UsageError("[❌]\n")
