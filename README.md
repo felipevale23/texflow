@@ -38,13 +38,24 @@
 
 ### Opção 1 — Baixar o binário pronto (Linux x86_64)
 
-Baixa o executável da [última release](https://github.com/felipevale23/texflow/releases/latest) diretamente, sem precisar clonar o repositório nem instalar Python:
+Baixa a [última release](https://github.com/felipevale23/texflow/releases/latest) diretamente, sem precisar clonar o repositório nem instalar Python. Recomendado — a versão em pasta, que parte em ~0,3 s (o arquivo único leva ~1,3 s a cada execução, o que pesa em cada build ao salvar):
+
+```bash
+mkdir -p ~/.local/lib ~/.local/bin
+curl -L https://github.com/felipevale23/texflow/releases/latest/download/texflow-linux-x86_64.tar.gz \
+  | tar xz -C ~/.local/lib
+ln -sfn ~/.local/lib/texflow/texflow ~/.local/bin/texflow
+```
+
+Ou o arquivo único, mais simples de copiar:
 
 ```bash
 curl -L https://github.com/felipevale23/texflow/releases/latest/download/texflow-linux-x86_64 -o texflow
 chmod +x texflow
 sudo mv texflow /usr/local/bin/   # ou mova para qualquer pasta do seu PATH
 ```
+
+`texflow --update` atualiza cada um no seu formato; `texflow --uninstall` remove a pasta e o symlink.
 
 > No momento só há binário para Linux x86_64. Para outras plataformas, use a Opção 2 ou 3.
 
@@ -58,9 +69,12 @@ cd texflow
 
 O script:
 
-1. Sincroniza as dependências e compila um binário único com PyInstaller (`dist/texflow`).
-2. Instala esse binário em `~/.local/bin/texflow` (ajustável via a variável `TEXFLOW_INSTALL_DIR`).
-3. Avisa se `~/.local/bin` não estiver no seu `PATH`.
+1. Sincroniza as dependências e compila com PyInstaller uma pasta (`dist/texflow/`, ~33 MB), que parte rápido.
+2. Instala a pasta em `~/.local/lib/texflow` (variável `TEXFLOW_LIB_DIR`) e põe um symlink em `~/.local/bin/texflow` (variável `TEXFLOW_INSTALL_DIR`).
+3. Deixa em `dist/` o pacote da release (`texflow-<so>-<arch>.tar.gz`).
+4. Avisa se `~/.local/bin` não estiver no seu `PATH`.
+
+Com `TEXFLOW_ONEFILE=1 ./install.sh` ele gera e instala o arquivo único (`~/.local/bin/texflow`), como nas versões anteriores.
 
 Para embutir o Tectonic no binário (e compilar com `--engine tectonic` numa máquina sem TeX Live):
 
@@ -166,7 +180,9 @@ Variáveis de ambiente:
 | `TEXFLOW_FAST` | `1` é igual a `--fast`. |
 | `TEXFLOW_NO_CACHE` | `1` desliga o cache do biber do Tectonic. |
 | `TEXFLOW_DEBUG` | Igual a `--debug`. |
-| `TEXFLOW_INSTALL_DIR` | (`install.sh`) pasta onde o binário é instalado. |
+| `TEXFLOW_INSTALL_DIR` | (`install.sh`) pasta do executável (ou do symlink pra ele) no `PATH`. |
+| `TEXFLOW_LIB_DIR` | (`install.sh`) pasta da instalação em pasta (padrão `~/.local/lib/texflow`). |
+| `TEXFLOW_ONEFILE` | (`install.sh`) `1` gera o arquivo único em vez da pasta. |
 | `TEXFLOW_BUNDLE_TECTONIC` | (`install.sh`) `1` embute o Tectonic no binário. |
 
 `--update` e `--uninstall` só têm efeito no **binário standalone** (baixado da release ou gerado por `install.sh`) — rodando a partir do código-fonte (`uv run texflow`), eles apenas indicam o comando equivalente (`git pull && uv sync`).
