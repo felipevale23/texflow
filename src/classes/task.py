@@ -1,4 +1,5 @@
 import filecmp
+import fnmatch
 import shutil
 from abc import ABC, abstractmethod
 from collections.abc import Iterable
@@ -13,9 +14,68 @@ Dependencies = Iterable["Task"] | None
 Source = Path | Traversable
 
 
+# Pastas que nunca vão pro build/: a saída do próprio build, caches e
+# dependências de outras ferramentas, que podem ter dezenas de milhares de
+# arquivos e deixariam cada build lento. Pastas ocultas (.git, .venv,
+# .vscode...) também ficam de fora, ver is_excluded_dir().
+EXCLUDED_DIRS = frozenset({"build", "__pycache__", "node_modules", "venv"})
+
+# Arquivo opcional na raiz do template com padrões (um por linha, estilo
+# .gitignore simplificado) do que não deve ser copiado pro build/.
+IGNORE_FILE = ".texflowignore"
+
+
+def is_excluded_dir(name: str) -> bool:
+    """Pastas sempre ignoradas na cópia e no watch: EXCLUDED_DIRS e ocultas.
+    Arquivos ocultos (ex.: .latexmkrc) continuam sendo copiados."""
+    return name in EXCLUDED_DIRS or name.startswith(".")
+
+
+def load_ignore_patterns(template_dir: Path) -> list[str]:
+    """Lê <template_dir>/.texflowignore. Linhas vazias e comentários (#) são
+    descartados. Sem o arquivo, devolve lista vazia."""
+    try:
+        text = (template_dir / IGNORE_FILE).read_text(encoding="utf-8")
+    except OSError:
+        return []
+    patterns = []
+    for line in text.splitlines():
+        line = line.strip()
+        if line and not line.startswith("#"):
+            patterns.append(line)
+    return patterns
+
+
+def matches_ignore(rel_path: str, is_dir: bool, patterns: list[str]) -> bool:
+    """Testa um caminho relativo à raiz do template (com '/') contra os
+    padrões do .texflowignore, com globs do fnmatch:
+
+    - "nome" ou "*.pdf": casa com o nome em qualquer nível;
+    - "pasta/sub" ou "/nome": casa com o caminho a partir da raiz;
+    - terminado em "/": só casa com pastas.
+
+    Uma pasta ignorada leva junto tudo o que está dentro dela."""
+    name = rel_path.rsplit("/", 1)[-1]
+    for pattern in patterns:
+        dir_only = pattern.endswith("/")
+        pat = pattern.rstrip("/")
+        if dir_only and not is_dir:
+            continue
+        if "/" in pat:
+            if fnmatch.fnmatchcase(rel_path, pat.lstrip("/")):
+                return True
+        elif fnmatch.fnmatchcase(name, pat):
+            return True
+    return False
+
+
 def _same_content(src: Path, dst: Path) -> bool:
-    """True se dst existe, não é symlink, e tem o mesmo conteúdo de src."""
-    return dst.exists() and not dst.is_symlink() and filecmp.cmp(src, dst, shallow=False)
+    """True se dst existe, não é symlink, e tem o mesmo conteúdo de src.
+
+    Compara primeiro tamanho e mtime (o copy2 preserva o mtime, então um
+    arquivo intocado bate sem ler nada do disco) e só lê os bytes quando
+    eles diferem."""
+    return dst.exists() and not dst.is_symlink() and filecmp.cmp(src, dst, shallow=True)
 
 
 def _copy_if_changed(src, dst) -> None:
@@ -255,10 +315,10 @@ class CopyTree(Task):
 
             # 🔥 Arquivos .tex que DEVEM ser copiados mesmo com ignore_tex=True
             tex_whitelist = {"glossaries.tex", "abstract.tex", "conclusions.tex"}
-            excluded_names = {"build", "__pycache__", ".git"}
 
             src = self.src.resolve()
             dst = self.dst.resolve()
+            patterns = load_ignore_patterns(src)
 
             def should_ignore(path: Path) -> bool:
                 # Evita o loop infinito garantindo que a pasta de destino
@@ -266,7 +326,16 @@ class CopyTree(Task):
                 if path.resolve() == dst:
                     return True
 
-                if path.name in excluded_names:
+                is_dir = path.is_dir()
+                if is_dir and is_excluded_dir(path.name):
+                    return True
+
+                if path.name == IGNORE_FILE:
+                    return True
+
+                if patterns and matches_ignore(
+                    path.relative_to(src).as_posix(), is_dir, patterns
+                ):
                     return True
 
                 if self.ignore_tex and path.suffix == ".tex":
@@ -325,7 +394,7 @@ class CopyTree(Task):
 
         for item in src_traversable.iterdir():
             # 🔥 CORREÇÃO 3: Bloqueia as pastas indesejadas também no modo Traversable
-            if item.name in ("build", "__pycache__", ".git"):
+            if item.is_dir() and is_excluded_dir(item.name):
                 continue
 
             item_dst = dst_path / item.name

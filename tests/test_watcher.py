@@ -147,6 +147,20 @@ def test_filter_ignores_build_output_and_vscode(tmp_path):
     assert not f(Change.modified, str(template_dir / ".main.tex.swp"))
 
 
+def test_filter_ignores_texflowignore_and_dependency_dirs(tmp_path):
+    _, template_dir = _template(tmp_path)
+    (template_dir / ".texflowignore").write_text("simulation\n*.pdf\n")
+    f = watch_filter(template_dir)
+
+    assert f(Change.modified, str(template_dir / "main.tex"))
+    assert f(Change.modified, str(template_dir / "style.sty"))
+    assert not f(Change.modified, str(template_dir / "simulation" / "main.py"))
+    assert not f(Change.modified, str(template_dir / "out.pdf"))
+    assert not f(Change.added, str(template_dir / "slides" / "node_modules" / "a.js"))
+    assert not f(Change.added, str(template_dir / "sim" / ".venv" / "lib" / "a.py"))
+    assert not f(Change.modified, str(template_dir / "build" / "main.pdf"))
+
+
 def test_watch_paths_skip_assets_in_frozen_binary(tmp_path, monkeypatch):
     data, template_dir = _template(tmp_path)
     assets = tmp_path / "assets"

@@ -232,6 +232,55 @@ def test_copy_tree_dst_inside_src_respects_whitelist(tmp_path):
     assert copied == {"glossaries.tex"}
 
 
+def test_copy_tree_skips_dependency_and_hidden_dirs(tmp_path):
+    src_dir = tmp_path / "project"
+    dst_dir = src_dir / "build"
+    for name in ("node_modules", "venv", ".venv", ".vscode", "src"):
+        (src_dir / name).mkdir(parents=True)
+        (src_dir / name / "f.txt").write_text("x")
+    (src_dir / ".latexmkrc").write_text("$pdf_mode = 5;")
+
+    CopyTree(src=src_dir, dst=dst_dir).run()
+
+    assert {p.name for p in dst_dir.iterdir()} == {"src", ".latexmkrc"}
+
+
+def test_copy_tree_honors_texflowignore(tmp_path):
+    src_dir = tmp_path / "project"
+    dst_dir = src_dir / "build"
+    (src_dir / "simulation" / "data").mkdir(parents=True)
+    (src_dir / "simulation" / "data" / "big.csv").write_text("x")
+    (src_dir / "assets" / "raw").mkdir(parents=True)
+    (src_dir / "assets" / "raw" / "a.png").write_text("x")
+    (src_dir / "assets" / "fig.png").write_text("x")
+    (src_dir / "src").mkdir()
+    (src_dir / "src" / "refs.bib").write_text("x")
+    (src_dir / "src" / "old.pdf").write_text("x")
+    (src_dir / "report.pdf").write_text("x")
+    (src_dir / "notes").write_text("arquivo, não pasta")
+    (src_dir / ".texflowignore").write_text(
+        "# comentário\n\nsimulation\n*.pdf\nassets/raw\nnotes/\n"
+    )
+
+    CopyTree(src=src_dir, dst=dst_dir).run()
+
+    copied = {p.relative_to(dst_dir).as_posix() for p in dst_dir.rglob("*")}
+    assert copied == {"assets", "assets/fig.png", "src", "src/refs.bib", "notes"}
+
+
+def test_copy_tree_skips_byte_comparison_when_size_and_mtime_match(tmp_path, monkeypatch):
+    src = tmp_path / "src.txt"
+    src.write_text("conteúdo")
+    dst = tmp_path / "dst" / "src.txt"
+    CopyTree(src=src, dst=dst).run()
+
+    def fail(*_args, **_kwargs):
+        raise AssertionError("não deveria ler o conteúdo")
+
+    monkeypatch.setattr(task_module.filecmp, "_do_cmp", fail)
+    CopyTree(src=src, dst=dst).run()
+
+
 def test_copy_tree_rejects_unsupported_source_type():
     with pytest.raises(TypeError):
         CopyTree(src="not-a-path-or-traversable", dst=None).run()

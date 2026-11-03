@@ -3,6 +3,7 @@ import sys
 from collections.abc import Callable
 from pathlib import Path
 
+from classes.task import is_excluded_dir, load_ignore_patterns, matches_ignore
 from scripts.builder import DEFAULT_ENGINE, build
 
 # Janela pra agrupar rajadas de eventos (ex: editor que salva via arquivo
@@ -47,10 +48,38 @@ def watch_paths(data_path: Path, template_dir: Path) -> list[Path]:
     return paths
 
 
-def watch_filter():
+def _ignored_in_template(path: Path, template_dir: Path, patterns: list[str]) -> bool:
+    """True se o caminho está numa pasta que o CopyTree não copia (oculta,
+    node_modules, venv...) ou casa com o .texflowignore: mudar algo ali não
+    muda o build, então não vale um rebuild."""
+    try:
+        parts = path.relative_to(template_dir).parts
+    except ValueError:
+        return False
+    for i, part in enumerate(parts):
+        is_dir = i < len(parts) - 1 or path.is_dir()
+        if is_dir and is_excluded_dir(part):
+            return True
+        if patterns and matches_ignore("/".join(parts[: i + 1]), is_dir, patterns):
+            return True
+    return False
+
+
+def watch_filter(template_dir: Path | None = None):
     from watchfiles import DefaultFilter
 
-    return DefaultFilter(ignore_dirs=(*DefaultFilter.ignore_dirs, *IGNORED_DIRS))
+    default = DefaultFilter(ignore_dirs=(*DefaultFilter.ignore_dirs, *IGNORED_DIRS))
+    if template_dir is None:
+        return default
+
+    patterns = load_ignore_patterns(template_dir)
+
+    def accept(change, path: str) -> bool:
+        return default(change, path) and not _ignored_in_template(
+            Path(path), template_dir, patterns
+        )
+
+    return accept
 
 
 def watch(
@@ -89,7 +118,7 @@ def watch(
 
         for changes in watcher(
             *paths,
-            watch_filter=watch_filter(),
+            watch_filter=watch_filter(template_dir),
             debounce=DEBOUNCE_MS,
             raise_interrupt=False,
         ):

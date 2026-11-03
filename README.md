@@ -104,6 +104,21 @@ O valor médio calculado é: $<< media | round(2) >>$.
 
 > Arquivos `.tex` diferentes de `main.tex` são ignorados na cópia por padrão — exceto `abstract.tex`, `glossaries.tex` e `conclusions.tex`, que sempre são copiados.
 
+A cópia também pula pastas ocultas (`.git`, `.venv`, `.vscode`...), `node_modules`, `venv`, `__pycache__` e `build`; arquivos ocultos como o `.latexmkrc` continuam sendo copiados. Se a pasta do template tiver outras coisas que o documento não usa (código, apresentação, PDFs antigos), liste-as num `.texflowignore` na raiz do template — senão elas são copiadas pro `build/` a cada build e o deixam lento:
+
+```gitignore
+# um padrão (glob) por linha; comentários em linhas próprias, com #
+# sem "/": casa com o nome em qualquer nível
+simulation
+*.pdf
+# com "/": caminho a partir da raiz do template
+assets/raw
+# terminado em "/": só pastas
+notes/
+```
+
+O modo `--watch` usa as mesmas regras e não rebuilda quando muda algo ignorado. Arquivos que não mudaram são reconhecidos por tamanho e data de modificação, sem reler o conteúdo.
+
 Veja `assets/templates/journal/` no repositório para um exemplo completo.
 
 ### 2\. Prepare seu JSON de dados
