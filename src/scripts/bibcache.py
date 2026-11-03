@@ -47,6 +47,15 @@ digest=$(
     }} | hash
 )
 
+# TEXFLOW_BIBER_FREEZE=1 (rascunho por capítulo, --only): o .bcf só tem as
+# citações do capítulo compilado; devolve o .bbl do último build completo.
+if [ "${{TEXFLOW_BIBER_FREEZE:-0}}" = 1 ] && [ -f "$cache/$stem.bbl" ]; then
+    cp "$cache/$stem.bbl" .
+    [ -f "$cache/$stem.blg" ] && cp "$cache/$stem.blg" .
+    echo "texflow: rascunho (--only); usando o .bbl do último build completo."
+    exit 0
+fi
+
 if [ -f "$cache/$stem.bbl" ] && [ "$(cat "$cache/biber.digest" 2>/dev/null)" = "$digest" ]; then
     cp "$cache/$stem.bbl" .
     [ -f "$cache/$stem.blg" ] && cp "$cache/$stem.blg" .

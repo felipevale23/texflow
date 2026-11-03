@@ -18,7 +18,7 @@ from classes.task import CopyTree, FnTask, RenderTemplate, Task
 from configs.paths import BUILD_DIR
 from configs.spinner import spinner
 from configs.style import STYLE
-from scripts import bibcache
+from scripts import bibcache, split
 from scripts.utils import is_tty
 
 
@@ -119,7 +119,7 @@ def run_latex_command(emoji, cmd, cwd=None, env=None):
     if debug_mode:
         print(result.stdout)
 
-def latexmk_build_process(build_dir: Path):
+def latexmk_build_process(build_dir: Path, freeze_bib: bool = False):
     """Compila via latexmk, que decide sozinho (por mtime/dependência de cada
     \\input, não um hash global) o que precisa ser reprocessado. Cache
     incremental nativo dele vive em build/.fdb_latexmk e build/*.fls e não é
@@ -146,6 +146,12 @@ def latexmk_build_process(build_dir: Path):
         "-synctex=1",
         "-file-line-error"
     ]
+
+    # Rascunho por capítulo (--only): o .aux só tem as citações do capítulo
+    # compilado, e o biber geraria um .bbl incompleto. Mantém o do último
+    # build completo (ver scripts/split.py).
+    if freeze_bib:
+        cmd.insert(1, "-bibtex-")
 
     if os.getenv("TEXFLOW_DEBUG"):
         cmd.append("-verbose")
@@ -250,7 +256,7 @@ def fast_single_pass(build_dir: Path) -> bool:
     return not (build_dir / "main.bcf").is_file() or (build_dir / "main.bbl").is_file()
 
 
-def tectonic_build_process(build_dir: Path):
+def tectonic_build_process(build_dir: Path, freeze_bib: bool = False):
     """Compila via Tectonic: engine XeTeX autocontido que baixa os pacotes
     sob demanda (precisa de rede só na primeira vez, depois fica em cache) e
     decide sozinho quantas passadas/biber rodar. Gera main.pdf, main.log e
@@ -271,6 +277,10 @@ def tectonic_build_process(build_dir: Path):
         if real_biber:
             shim_dir = bibcache.install_shim(Path(build_dir), Path(real_biber))
             env["PATH"] = f"{shim_dir}{os.pathsep}{env['PATH']}"
+    # Rascunho por capítulo (--only): o shim devolve o .bbl do último build
+    # completo em vez de rodar o biber com as citações de um capítulo só.
+    if freeze_bib:
+        env["TEXFLOW_BIBER_FREEZE"] = "1"
 
     cmd = [
         resolve_tectonic(),
@@ -462,11 +472,19 @@ def _jinja_env(template_arg: str) -> Environment:
     else:
         raise FileNotFoundError("Default template não encontrado.\n")
 
-def build(data_path: str, template_folder: str, engine: str = DEFAULT_ENGINE) -> bool:
-    """
+def build(
+    data_path: str,
+    template_folder: str,
+    engine: str = DEFAULT_ENGINE,
+    only: str | None = None,
+) -> bool:
+    r"""
     Cria o arquivo .tex com as variáveis passadas e compila com o engine
     escolhido (ver ENGINES). Retorna True se o build deu certo — erros são
     reportados aqui mesmo e não propagam (o modo --watch depende disso).
+
+    only: arquivo alterado (--only); compila só o capítulo que depende
+    dele, via \include/\includeonly (ver scripts/split.py).
     """
     
     print = print_formatted_text
@@ -485,7 +503,15 @@ def build(data_path: str, template_folder: str, engine: str = DEFAULT_ENGINE) ->
             
             # --- Jinja ---
             env = _jinja_env(template_folder)
-            template = env.get_template("main.tex")
+            split_plan = None
+            if only or split.active(build_dir):
+                changed = Path(only) if only else None
+                split_plan = split.plan(env, template_path, build_dir, changed, context)
+                template = env.from_string(split_plan.main_source)
+                with sp.hidden():
+                    print(f"📑 {split_plan.describe()}")
+            else:
+                template = env.get_template("main.tex")
             
             # --- Tasks ---
             tasks: list[Task] = []
@@ -520,6 +546,7 @@ def build(data_path: str, template_folder: str, engine: str = DEFAULT_ENGINE) ->
             compile_pdf = FnTask(
                 ENGINES[engine],
                 build_dir,
+                freeze_bib=bool(split_plan and split_plan.only),
                 mode="chain",
                 dependencies=[render, copy_images, copy_plots, copy_files]
             )

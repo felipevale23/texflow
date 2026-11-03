@@ -10,6 +10,7 @@ originais:
 - noop: rebuild sem mudar nada;
 - text: rebuild depois de mudar só texto;
 - cite: rebuild depois de acrescentar uma citação (só com .bib);
+- draft: rebuild com --only depois de mudar só texto num capítulo;
 - watch: do save até o fim do rebuild no modo --watch.
 
 Cada cenário roda em cada configuração (engine, --fast, cache do biber).
@@ -46,11 +47,12 @@ from classes.task import (
     load_ignore_patterns,
     matches_ignore,
 )
+from scripts.split import find_chapters
 
 ROOT = Path(__file__).resolve().parent.parent.parent
 DEFAULT_TEMPLATE = ROOT / "assets" / "templates" / "journal"
 
-SCENARIOS = ("startup", "cold", "noop", "text", "cite", "watch")
+SCENARIOS = ("startup", "cold", "noop", "text", "cite", "draft", "watch")
 BUILD_END = re.compile(r"\[texflow\] build (concluído|falhou)")
 # Variáveis que mudam o comportamento do build: limpas antes de cada run pra
 # que só a configuração do cenário valha.
@@ -205,8 +207,8 @@ class Runner:
             print(out[-2000:], file=sys.stderr)
         return elapsed, ok, out
 
-    def build(self, config: Config) -> tuple[float, bool]:
-        elapsed, ok, _ = self.timed(self.build_cmd(config), config.env())
+    def build(self, config: Config, *extra: str) -> tuple[float, bool]:
+        elapsed, ok, _ = self.timed(self.build_cmd(config, *extra), config.env())
         return elapsed, ok
 
     def clean_build(self) -> None:
@@ -244,13 +246,24 @@ def run_build_scenario(
         result.biber_runs = 0
 
     if scenario == "cite" and cite_key is None:
-        result.ok, result.note = False, "sem .bib no template"
+        result.note = "pulado: sem .bib no template"
         return result
 
+    extra: tuple[str, ...] = ()
+    if scenario == "draft":
+        chapters = find_chapters(main_tex.read_text(encoding="utf-8"))
+        if not chapters:
+            result.note = "pulado: sem capítulos pra --only"
+            return result
+        chapter = runner.workdir / chapters[0].template
+        extra = ("--only", str(chapter))
+        result.note = f"--only {chapters[0].template}"
+
     if scenario != "cold":
-        # Estado de partida: um build completo já feito.
+        # Estado de partida: um build completo já feito (no draft, o
+        # primeiro --only é o build completo no formato \include).
         runner.clean_build()
-        _, ok = runner.build(config)
+        _, ok = runner.build(config, *extra)
         if not ok:
             result.ok, result.note = False, "build inicial falhou"
             return result
@@ -262,9 +275,12 @@ def run_build_scenario(
             text_edit(main_tex, i)
         elif scenario == "cite":
             cite_edit(main_tex, cite_key, i)
+        elif scenario == "draft":
+            with chapter.open("a", encoding="utf-8") as f:
+                f.write(f"\nParágrafo de benchmark número {i}, só texto.\n")
 
         before = biber_marker(runner.workdir)
-        elapsed, ok = runner.build(config)
+        elapsed, ok = runner.build(config, *extra)
         result.times.append(elapsed)
         result.ok &= ok
         if track_biber and biber_marker(runner.workdir) != before:
@@ -338,7 +354,7 @@ def format_table(results: list[Result], baseline: dict | None = None) -> str:
             old = baseline.get((r.config, r.scenario))
             if old:
                 delta = f"{r.median - old:+.2f}s ({(r.median - old) / old:+.0%})"
-        status = "" if r.ok else f"FALHOU {r.note}".strip()
+        status = f"FALHOU {r.note}".strip() if not r.ok else r.note
         rows.append(
             (r.config, r.scenario, _fmt(r.median), _fmt(r.best), str(len(r.times)), biber, delta, status)
         )

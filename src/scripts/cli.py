@@ -143,6 +143,16 @@ def cli():
     )
 
     parser.add_argument(
+        "--only",
+        metavar="ARQUIVO",
+        default=None,
+        help="Com --build: modo rascunho, compila só o capítulo que usa ARQUIVO (o que você "
+             "acabou de salvar), via \\include/\\includeonly. As outras páginas somem do PDF, "
+             "mas a numeração e as referências continuam certas. Se ARQUIVO não for de um "
+             "capítulo, faz o build completo."
+    )
+
+    parser.add_argument(
         "--fast",
         action="store_true",
         help="Com --engine tectonic: uma passada só do TeX, reaproveitando o .aux/.bbl do build "
@@ -201,6 +211,8 @@ def cli():
             welcome()
             if args.watch:
                 watch(args.input, args.template, engine)
+            elif args.only:
+                build(args.input, args.template, engine, only=args.only)
             else:
                 build(args.input, args.template, engine)
 

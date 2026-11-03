@@ -64,7 +64,8 @@ def test_config_flags_and_env(monkeypatch):
 def test_table_and_baseline_roundtrip(tmp_path):
     results = [
         Result("tectonic", "text", [10.0, 9.0, 11.0], biber_runs=0),
-        Result("latexmk", "cite", [], ok=False, note="sem .bib no template"),
+        Result("latexmk", "cite", [], ok=False, note="build inicial falhou"),
+        Result("latexmk", "draft", [], note="pulado: sem capítulos pra --only"),
     ]
     path = tmp_path / "base.json"
     path.write_text(json.dumps({"results": [r.to_dict() for r in results]}))
@@ -75,7 +76,9 @@ def test_table_and_baseline_roundtrip(tmp_path):
     table = format_table(faster, baseline)
     assert "-2.00s (-20%)" in table
     assert "0/1 rodou" in table
-    assert "FALHOU sem .bib" in format_table(results)
+    table = format_table(results)
+    assert "FALHOU build inicial falhou" in table
+    assert "pulado: sem capítulos" in table
 
 
 def test_parse_args_rejects_unknown_names():

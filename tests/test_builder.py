@@ -415,6 +415,20 @@ def test_tectonic_puts_biber_cache_shim_first(captured_cmd, tmp_path, monkeypatc
     assert os.access(shim, os.X_OK)
 
 
+def test_latexmk_freeze_bib_skips_biber(captured_cmd, tmp_path):
+    latexmk_build_process(tmp_path, freeze_bib=True)
+    cmd = captured_cmd[0][0]
+    assert cmd[0] == "latexmk" and "-bibtex-" in cmd and cmd[-1] == "main.tex"
+
+
+def test_tectonic_freeze_bib_sets_env(captured_cmd, tmp_path, monkeypatch):
+    monkeypatch.setattr(builder, "resolve_tectonic", lambda: "/opt/tectonic")
+    tectonic_build_process(tmp_path, freeze_bib=True)
+    assert captured_cmd[0][2]["TEXFLOW_BIBER_FREEZE"] == "1"
+    tectonic_build_process(tmp_path)
+    assert "TEXFLOW_BIBER_FREEZE" not in captured_cmd[1][2]
+
+
 def test_cli_fast_flag_sets_env(monkeypatch):
     # setenv (e não delenv) pro monkeypatch restaurar a env depois: a CLI
     # escreve direto em os.environ.

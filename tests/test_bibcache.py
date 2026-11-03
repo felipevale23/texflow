@@ -126,3 +126,24 @@ def test_install_shim_is_stable(setup):
 def test_cache_can_be_disabled(monkeypatch):
     monkeypatch.setenv("TEXFLOW_NO_CACHE", "1")
     assert not bibcache.cache_enabled()
+
+
+def test_freeze_returns_last_full_bbl_even_if_inputs_changed(setup, monkeypatch):
+    tmp_path, _biber, counter, shim_dir = setup
+    _run(shim_dir, _workdir(tmp_path, "w1", "bcf-completo"))
+
+    monkeypatch.setenv("TEXFLOW_BIBER_FREEZE", "1")
+    work2 = _workdir(tmp_path, "w2", "bcf-so-um-capitulo")
+    result = _run(shim_dir, work2)
+
+    assert result.returncode == 0
+    assert "rascunho" in result.stdout
+    assert _runs(counter) == 1
+    assert (work2 / "main.bbl").read_text() == "bcf-completo"
+
+
+def test_freeze_without_cache_runs_biber(setup, monkeypatch):
+    tmp_path, _biber, counter, shim_dir = setup
+    monkeypatch.setenv("TEXFLOW_BIBER_FREEZE", "1")
+    _run(shim_dir, _workdir(tmp_path, "w1", "bcf"))
+    assert _runs(counter) == 1

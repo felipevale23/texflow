@@ -162,6 +162,7 @@ texflow --build --input dados.json --template caminho/para/pasta_do_template
 | `-t`, `--template` | não (padrão: `journal`) | Caminho para a pasta do template (deve conter `main.tex`). |
 | `--engine` | não (padrão: `latexmk`) | Engine de compilação: `latexmk` ou `tectonic`. Também pode vir da variável `TEXFLOW_ENGINE`; a flag tem prioridade. |
 | `-w`, `--watch` | não | Com `--build`: depois do primeiro build, refaz o build a cada mudança (ver abaixo). Com `--init`: gera a task de watch do VS Code em vez do Run on Save. |
+| `--only ARQUIVO` | não | Com `--build`: compila só o capítulo que usa `ARQUIVO` (ver [Rascunho por capítulo](#rascunho-por-capitulo)). |
 | `--fast` | não | Com `--engine tectonic`: uma passada só do TeX, reaproveitando o `.aux`/`.bbl` do build anterior (ver [Modo rápido](#modo-rapido-tectonic)). Equivale a `TEXFLOW_FAST=1`. |
 | `--debug` | não | Ativa logs verbosos (equivalente a `TEXFLOW_DEBUG=1`): `-verbose` no latexmk, `--print` no Tectonic. |
 | `--init` | não | Cria `.vscode/settings.json` e `.vscode/extensions.json` no diretório atual, com a receita do LaTeX Workshop e o rebuild automático já configurados pro TexFlow (aceita `--engine` e `--watch`). |
@@ -221,7 +222,25 @@ O Tectonic roda TeX → biber → TeX de novo a cada build. Com `--fast` (ou `TE
 
 **Cache do biber:** o Tectonic roda o biber a cada build, mesmo quando só o texto mudou. O TeXFlow põe na frente do `PATH` dele um `biber` próprio que compara as entradas (o `.bcf`, os `.bib` e o binário do biber) com as do build anterior e, se forem iguais, devolve o `.bbl` guardado em `build/.texflow-cache/` sem rodar o biber (~1,7 s a menos por build num documento com `biblatex`). Uma citação nova ou um `.bib` editado rodam o biber normalmente. `TEXFLOW_NO_CACHE=1` desliga o cache (no Windows ele fica desligado).
 
-#### Modo watch
+<a id="rascunho-por-capitulo"></a>
+
+#### Rascunho por capítulo (`--only`)
+
+O TeX não compila "só o que mudou": qualquer edição faz ele diagramar o documento inteiro. O jeito do próprio LaTeX de compilar só um pedaço é `\include` + `\includeonly`, e o `--only ARQUIVO` usa isso:
+
+```bash
+texflow --build --engine tectonic --fast --only src/introducao/introducao.tex --input input.json --template .
+```
+
+- Cada `<<% include "x.tex" %>>` sozinho na linha, no corpo do documento (fora de ambientes, ou dentro de `appendices`/`appendix`), é renderizado em `build/_include/` e vira `\include{...}` no `main.tex`.
+- O capítulo que usa `ARQUIVO` (direto ou por outros `<<% include %>>` dentro dele) entra no `\includeonly`: só ele é diagramado. As outras páginas somem do PDF, mas numeração, sumário e referências continuam certos (vêm do `.aux` de cada capítulo).
+- A bibliografia fica congelada no `.bbl` do último build completo: uma citação nova aparece como indefinida até o próximo build sem `--only`.
+- Se `ARQUIVO` não for de um capítulo (preâmbulo, `.sty`, `input.json`), ou se for o primeiro build nesse formato, faz o build completo.
+- Depois do primeiro `--only`, os builds sem `--only` também usam o formato `\include` (o texto do PDF é o mesmo); limpar o `build/` volta ao formato normal.
+
+Num TCC de 60 páginas, o rebuild ao salvar um capítulo caiu de ~8,3 s pra ~5,4 s. No Run on Save do VS Code, use `--only "${file}"`.
+
+#### Modo watch#### Modo watch
 
 ```bash
 texflow --build --watch --input dados.json --template pasta_do_template
@@ -284,6 +303,7 @@ uv run perf          # harness de performance (ver abaixo)
 | `noop` | rebuild sem mudar nada |
 | `text` | rebuild depois de mudar só texto |
 | `cite` | rebuild depois de acrescentar uma citação (só com `.bib`) |
+| `draft` | rebuild com `--only` depois de mudar só texto no primeiro capítulo |
 | `watch` | do save até o fim do rebuild no `--watch` |
 
 Cada cenário roda em cada configuração (`latexmk`, `tectonic`, `tectonic-fast`, `tectonic-nocache`, `tectonic-fast-nocache`) e sai com mediana, mínimo e, no Tectonic, quantas vezes o biber rodou de verdade (o resto veio do cache).
