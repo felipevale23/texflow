@@ -29,6 +29,7 @@ test = "scripts.tasks:test"
 build-dist = "scripts.tasks:build_dist"
 clean = "scripts.tasks:clean"
 check = "scripts.tasks:check"
+perf = "scripts.perf:main"
 
 [dependency-groups]
 dev = [

@@ -254,6 +254,32 @@ uv run format-check  # verifica formatação sem alterar arquivos
 uv run check         # lint + format-check + test
 uv run clean         # remove dist/, build/ e caches
 uv run build-dist    # gera wheel/sdist com `uv build`
+uv run perf          # harness de performance (ver abaixo)
+```
+
+#### Harness de performance
+
+`uv run perf` mede o tempo de build de fora, rodando a CLI como o usuário roda, numa cópia temporária do template (os arquivos originais não são tocados). Cenários:
+
+| cenário | o que mede |
+|---|---|
+| `startup` | `texflow --version`: a partida do processo (pesa no binário do PyInstaller) |
+| `cold` | build com o `build/` vazio |
+| `noop` | rebuild sem mudar nada |
+| `text` | rebuild depois de mudar só texto |
+| `cite` | rebuild depois de acrescentar uma citação (só com `.bib`) |
+| `watch` | do save até o fim do rebuild no `--watch` |
+
+Cada cenário roda em cada configuração (`latexmk`, `tectonic`, `tectonic-fast`, `tectonic-nocache`, `tectonic-fast-nocache`) e sai com mediana, mínimo e, no Tectonic, quantas vezes o biber rodou de verdade (o resto veio do cache).
+
+```bash
+uv run perf                                     # template de exemplo (journal), configs padrão, 3 repetições
+uv run perf -c tectonic-fast -s text,watch -n 5 # só algumas configs/cenários
+uv run perf -t ~/tese -i ~/tese/input.json --json antes.json
+# depois de uma mudança, comparar (coluna "vs base"):
+uv run perf -t ~/tese -i ~/tese/input.json --compare antes.json
+# medir o binário instalado em vez do código-fonte:
+uv run perf --texflow ~/.local/bin/texflow
 ```
 
 -----
