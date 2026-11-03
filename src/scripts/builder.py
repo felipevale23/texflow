@@ -18,6 +18,7 @@ from classes.task import CopyTree, FnTask, RenderTemplate, Task
 from configs.paths import BUILD_DIR
 from configs.spinner import spinner
 from configs.style import STYLE
+from scripts import bibcache
 from scripts.utils import is_tty
 
 
@@ -262,6 +263,14 @@ def tectonic_build_process(build_dir: Path):
     biber = resolve_tectonic_biber()
     if biber is not None:
         env["PATH"] = f"{biber.parent}{os.pathsep}{env.get('PATH', '')}"
+
+    # E na frente dele o shim do cache, que só roda o biber de verdade
+    # quando o .bcf ou os .bib mudaram (ver scripts/bibcache.py).
+    if bibcache.cache_enabled():
+        real_biber = shutil.which("biber", path=env["PATH"])
+        if real_biber:
+            shim_dir = bibcache.install_shim(Path(build_dir), Path(real_biber))
+            env["PATH"] = f"{shim_dir}{os.pathsep}{env['PATH']}"
 
     cmd = [
         resolve_tectonic(),

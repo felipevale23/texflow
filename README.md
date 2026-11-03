@@ -164,6 +164,7 @@ Variáveis de ambiente:
 | `TEXFLOW_TECTONIC` | Caminho explícito pro binário do Tectonic. |
 | `TEXFLOW_BIBER` | biber usado com o Tectonic (o binário ou a pasta dele). Padrão: `~/.local/opt/biber-2.17/bin/biber`, se existir; senão o do `PATH`. |
 | `TEXFLOW_FAST` | `1` é igual a `--fast`. |
+| `TEXFLOW_NO_CACHE` | `1` desliga o cache do biber do Tectonic. |
 | `TEXFLOW_DEBUG` | Igual a `--debug`. |
 | `TEXFLOW_INSTALL_DIR` | (`install.sh`) pasta onde o binário é instalado. |
 | `TEXFLOW_BUNDLE_TECTONIC` | (`install.sh`) `1` embute o Tectonic no binário. |
@@ -201,6 +202,8 @@ O Tectonic é procurado nesta ordem: `TEXFLOW_TECTONIC` → binário embutido no
 #### Modo rápido (Tectonic)
 
 O Tectonic roda TeX → biber → TeX de novo a cada build. Com `--fast` (ou `TEXFLOW_FAST=1`) ele roda o TeX uma vez só, reaproveitando o `.aux` e o `.bbl` que o build anterior deixou em `build/` — num documento de 60 páginas, de ~17 s pra ~10 s. Sumário, referências e citações saem certos; uma citação nova ou uma numeração que mudou aparece no build seguinte. Com o `build/` limpo (sem `.aux`/`.bbl`) faz o build completo. Bom pro rebuild ao salvar; pra versão final, rode sem `--fast`. Com o latexmk a flag não muda nada (ele já é incremental).
+
+**Cache do biber:** o Tectonic roda o biber a cada build, mesmo quando só o texto mudou. O TeXFlow põe na frente do `PATH` dele um `biber` próprio que compara as entradas (o `.bcf`, os `.bib` e o binário do biber) com as do build anterior e, se forem iguais, devolve o `.bbl` guardado em `build/.texflow-cache/` sem rodar o biber (~1,7 s a menos por build num documento com `biblatex`). Uma citação nova ou um `.bib` editado rodam o biber normalmente. `TEXFLOW_NO_CACHE=1` desliga o cache (no Windows ele fica desligado).
 
 #### Modo watch
 

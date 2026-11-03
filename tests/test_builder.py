@@ -283,6 +283,8 @@ def captured_cmd(monkeypatch):
     monkeypatch.delenv("TEXFLOW_DEBUG", raising=False)
     monkeypatch.delenv("TEXFLOW_FAST", raising=False)
     monkeypatch.delenv("TEXFLOW_BIBER", raising=False)
+    # Cache do biber desligado aqui; ele tem os próprios testes abaixo.
+    monkeypatch.setenv("TEXFLOW_NO_CACHE", "1")
     # Sem biber 2.17 "instalado", independente da máquina que roda os testes.
     monkeypatch.setattr(builder, "DEFAULT_TECTONIC_BIBER", Path("/nonexistent/biber"))
     return calls
@@ -393,6 +395,25 @@ def test_tectonic_without_compatible_biber_keeps_path(captured_cmd, tmp_path, mo
     monkeypatch.setenv("PATH", "/usr/bin")
     tectonic_build_process(tmp_path)
     assert captured_cmd[0][2]["PATH"] == "/usr/bin"
+
+
+@pytest.mark.skipif(os.name == "nt", reason="o shim do cache é um script sh")
+def test_tectonic_puts_biber_cache_shim_first(captured_cmd, tmp_path, monkeypatch):
+    monkeypatch.setattr(builder, "resolve_tectonic", lambda: "/opt/tectonic")
+    biber = _fake_exe(tmp_path / "opt" / "bin" / "biber")
+    monkeypatch.setattr(builder, "DEFAULT_TECTONIC_BIBER", biber)
+    monkeypatch.delenv("TEXFLOW_NO_CACHE")
+    build_dir = tmp_path / "build"
+    build_dir.mkdir()
+
+    tectonic_build_process(build_dir)
+
+    path = captured_cmd[0][2]["PATH"].split(os.pathsep)
+    shim = build_dir / ".texflow-cache" / "bin" / "biber"
+    assert path[:2] == [str(shim.parent), str(biber.parent)]
+    text = shim.read_text()
+    assert "--biber-cache" in text and str(biber) in text
+    assert os.access(shim, os.X_OK)
 
 
 def test_cli_fast_flag_sets_env(monkeypatch):
