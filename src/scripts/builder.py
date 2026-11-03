@@ -208,6 +208,47 @@ def resolve_tectonic() -> str:
         "aponte TEXFLOW_TECTONIC para o binário, ou use --engine latexmk."
     )
 
+BIBER_BIN = "biber.exe" if os.name == "nt" else "biber"
+
+# Onde o README manda instalar o biber 2.17, que casa com o biblatex 3.17 do
+# bundle do Tectonic (o biber do TeX Live atual é mais novo e recusa o .bcf).
+DEFAULT_TECTONIC_BIBER = Path.home() / ".local" / "opt" / "biber-2.17" / "bin" / BIBER_BIN
+
+
+def resolve_tectonic_biber() -> Path | None:
+    """biber a usar com o Tectonic, nesta ordem:
+
+    1. env TEXFLOW_BIBER (o binário ou a pasta dele; se não existir é erro);
+    2. DEFAULT_TECTONIC_BIBER, se estiver instalado;
+    3. None: o Tectonic usa o biber do PATH.
+    """
+    explicit = os.getenv("TEXFLOW_BIBER")
+    if explicit:
+        path = Path(explicit).expanduser()
+        if path.is_dir():
+            path = path / BIBER_BIN
+        if path.is_file():
+            return path
+        raise FileNotFoundError(f"TEXFLOW_BIBER aponta para {explicit}, onde não há biber.")
+
+    if DEFAULT_TECTONIC_BIBER.is_file():
+        return DEFAULT_TECTONIC_BIBER
+    return None
+
+
+def fast_single_pass(build_dir: Path) -> bool:
+    """Modo rápido (--fast ou TEXFLOW_FAST=1): uma passada só do TeX, que
+    reaproveita o .aux e o .bbl do build anterior em build/. Sumário,
+    referências e citações saem certos; uma citação nova ou numeração que
+    mudou só aparece no build seguinte. Sem .aux (ou com .bcf mas sem .bbl,
+    i.e. build/ limpo) faz o build completo."""
+    if os.getenv("TEXFLOW_FAST") != "1":
+        return False
+    if not (build_dir / "main.aux").is_file():
+        return False
+    return not (build_dir / "main.bcf").is_file() or (build_dir / "main.bbl").is_file()
+
+
 def tectonic_build_process(build_dir: Path):
     """Compila via Tectonic: engine XeTeX autocontido que baixa os pacotes
     sob demanda (precisa de rede só na primeira vez, depois fica em cache) e
@@ -216,6 +257,11 @@ def tectonic_build_process(build_dir: Path):
 
     env = os.environ.copy()
     env["TEXINPUTS"] = f"{build_dir}{os.pathsep}{env.get('TEXINPUTS','')}"
+
+    # O Tectonic chama o biber do PATH: põe o compatível na frente.
+    biber = resolve_tectonic_biber()
+    if biber is not None:
+        env["PATH"] = f"{biber.parent}{os.pathsep}{env.get('PATH', '')}"
 
     cmd = [
         resolve_tectonic(),
@@ -228,6 +274,9 @@ def tectonic_build_process(build_dir: Path):
         "--keep-intermediates",
         "--outdir", ".",
     ]
+
+    if fast_single_pass(Path(build_dir)):
+        cmd.append("--reruns=0")
 
     if os.getenv("TEXFLOW_DEBUG"):
         cmd.append("--print")
@@ -370,7 +419,8 @@ def summarize_latex_log(stdout: str, stderr: str | None = None, max_examples: in
         )
         parts.append(
             " • Com Tectonic, instale o biber que casa com o biblatex do bundle "
-            "(ver a tabela de compatibilidade na doc do biber) ou use --engine latexmk."
+            f"(hoje o 2.17) em {DEFAULT_TECTONIC_BIBER.parent} ou aponte TEXFLOW_BIBER "
+            "para ele (ver o README), ou use --engine latexmk."
         )
     elif tectonic_errors:
         parts.append("Erros do Tectonic:")

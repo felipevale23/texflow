@@ -5,10 +5,10 @@
         // Preview do PDF, SyncTeX (forward/inverse search) e painel de
         // erros lido a partir do build/main.log gerado pelo TexFlow.
         "James-Yu.latex-workshop",
-        // Roda "texflow --build" ao salvar qualquer .tex. Necessária
-        // porque o LaTeX Workshop não enxerga os parciais incluídos via
-        // Jinja "<<% include %>>" e não os rebuilda ao salvar. Ver o
-        // bloco "emeraldwalk.runonsave" em settings.json.
-        "emeraldwalk.RunOnSave"
+        // Roda "texflow --build" ao salvar .tex/.json/.sty/.cls/.bib.
+        // Necessária porque o LaTeX Workshop não enxerga os parciais
+        // incluídos via Jinja "<<% include %>>" e não os rebuilda ao
+        // salvar. Ver o bloco "runOnSave.commands" em settings.json.
+        "pucelle.run-on-save"
     ]
 }

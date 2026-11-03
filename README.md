@@ -147,7 +147,8 @@ texflow --build --input dados.json --template caminho/para/pasta_do_template
 | `-i`, `--input` | sim | Caminho para o JSON de dados (`{"payload": {...}}`). |
 | `-t`, `--template` | não (padrão: `journal`) | Caminho para a pasta do template (deve conter `main.tex`). |
 | `--engine` | não (padrão: `latexmk`) | Engine de compilação: `latexmk` ou `tectonic`. Também pode vir da variável `TEXFLOW_ENGINE`; a flag tem prioridade. |
-| `-w`, `--watch` | não | Com `--build`: depois do primeiro build, refaz o build a cada mudança (ver abaixo). Com `--init`: gera a task de watch do VS Code em vez do RunOnSave. |
+| `-w`, `--watch` | não | Com `--build`: depois do primeiro build, refaz o build a cada mudança (ver abaixo). Com `--init`: gera a task de watch do VS Code em vez do Run on Save. |
+| `--fast` | não | Com `--engine tectonic`: uma passada só do TeX, reaproveitando o `.aux`/`.bbl` do build anterior (ver [Modo rápido](#modo-rapido-tectonic)). Equivale a `TEXFLOW_FAST=1`. |
 | `--debug` | não | Ativa logs verbosos (equivalente a `TEXFLOW_DEBUG=1`): `-verbose` no latexmk, `--print` no Tectonic. |
 | `--init` | não | Cria `.vscode/settings.json` e `.vscode/extensions.json` no diretório atual, com a receita do LaTeX Workshop e o rebuild automático já configurados pro TexFlow (aceita `--engine` e `--watch`). |
 | `--update` | não | Verifica a última release no GitHub e, se houver uma versão mais nova, baixa e instala no lugar do binário atual. |
@@ -161,6 +162,8 @@ Variáveis de ambiente:
 |---|---|
 | `TEXFLOW_ENGINE` | Engine padrão (`latexmk` ou `tectonic`) quando `--engine` não é passado. |
 | `TEXFLOW_TECTONIC` | Caminho explícito pro binário do Tectonic. |
+| `TEXFLOW_BIBER` | biber usado com o Tectonic (o binário ou a pasta dele). Padrão: `~/.local/opt/biber-2.17/bin/biber`, se existir; senão o do `PATH`. |
+| `TEXFLOW_FAST` | `1` é igual a `--fast`. |
 | `TEXFLOW_DEBUG` | Igual a `--debug`. |
 | `TEXFLOW_INSTALL_DIR` | (`install.sh`) pasta onde o binário é instalado. |
 | `TEXFLOW_BUNDLE_TECTONIC` | (`install.sh`) `1` embute o Tectonic no binário. |
@@ -181,7 +184,23 @@ O Tectonic é procurado nesta ordem: `TEXFLOW_TECTONIC` → binário embutido no
 
 <a id="aviso-biber-com-tectonic"></a>
 
-> **Aviso — biber com Tectonic:** o Tectonic traz um `biblatex` fixo no bundle dele, mas chama o `biber` **do sistema**, e os dois precisam ser de versões compatíveis. Com o bundle atual (biblatex 3.17) o biber precisa ser o **2.17**; um biber mais novo (ex.: o 2.22 do TeX Live 2026) falha com `Found biblatex control file version 3.8, expected version 3.11`. O TeXFlow detecta esse erro e mostra a dica. Saídas: instalar o biber 2.17 (binário avulso [no SourceForge](https://sourceforge.net/projects/biblatex-biber/files/biblatex-biber/2.17/binaries/)) à frente no `PATH`, ou usar `--engine latexmk` em templates com `biblatex` (como o `journal` de exemplo). Templates sem bibliografia via biber não são afetados.
+> **Aviso — biber com Tectonic:** o Tectonic traz um `biblatex` fixo no bundle dele, mas chama o `biber` **do sistema**, e os dois precisam ser de versões compatíveis. Com o bundle atual (biblatex 3.17) o biber precisa ser o **2.17**; um biber mais novo (ex.: o 2.22 do TeX Live 2026) falha com `Found biblatex control file version 3.8, expected version 3.11`. O TeXFlow detecta esse erro e mostra a dica. Templates sem bibliografia via biber não são afetados.
+>
+> Com o Tectonic, o TeXFlow põe na frente do `PATH` o biber de `TEXFLOW_BIBER` ou, sem ela, o de `~/.local/opt/biber-2.17/bin/`, se existir — sem mexer no biber do sistema, que o latexmk continua usando. Pra instalar o biber 2.17 nesse lugar (Linux x86_64; outros sistemas [no SourceForge](https://sourceforge.net/projects/biblatex-biber/files/biblatex-biber/2.17/binaries/)):
+>
+> ```bash
+> mkdir -p ~/.local/opt/biber-2.17/bin
+> curl -fsSL "https://sourceforge.net/projects/biblatex-biber/files/biblatex-biber/2.17/binaries/Linux/biber-linux_x86_64.tar.gz/download" \
+>   | tar xz -C ~/.local/opt/biber-2.17/bin
+> ```
+>
+> A outra saída é usar `--engine latexmk` em templates com `biblatex` (como o `journal` de exemplo).
+
+<a id="modo-rapido-tectonic"></a>
+
+#### Modo rápido (Tectonic)
+
+O Tectonic roda TeX → biber → TeX de novo a cada build. Com `--fast` (ou `TEXFLOW_FAST=1`) ele roda o TeX uma vez só, reaproveitando o `.aux` e o `.bbl` que o build anterior deixou em `build/` — num documento de 60 páginas, de ~17 s pra ~10 s. Sumário, referências e citações saem certos; uma citação nova ou uma numeração que mudou aparece no build seguinte. Com o `build/` limpo (sem `.aux`/`.bbl`) faz o build completo. Bom pro rebuild ao salvar; pra versão final, rode sem `--fast`. Com o latexmk a flag não muda nada (ele já é incremental).
 
 #### Modo watch
 
@@ -200,19 +219,19 @@ texflow --init [--engine tectonic] [--watch]
 
 Isso cria (ou atualiza) na pasta `.vscode/`:
 
-* `settings.json` — receitas do LaTeX Workshop `TexFlow Build` (latexmk) e `TexFlow Build (Tectonic)`; a padrão (`Ctrl+Alt+B`) é a do `--engine` escolhido. Sem `--watch`, também um bloco `emeraldwalk.runonsave` que roda `texflow --build` ao salvar qualquer `.tex`, `.json`, `.sty`, `.cls` ou `.bib`.
-* `extensions.json` — recomenda [LaTeX Workshop](https://marketplace.visualstudio.com/items?itemName=James-Yu.latex-workshop) e, sem `--watch`, [RunOnSave](https://marketplace.visualstudio.com/items?itemName=emeraldwalk.RunOnSave).
+* `settings.json` — receitas do LaTeX Workshop `TexFlow Build` (latexmk) e `TexFlow Build (Tectonic)`; a padrão (`Ctrl+Alt+B`) é a do `--engine` escolhido. Com `--engine tectonic`, a receita e o rebuild ao salvar usam `--fast`. Sem `--watch`, também um bloco `runOnSave.commands` que roda `texflow --build` em segundo plano ao salvar qualquer `.tex`, `.json`, `.sty`, `.cls` ou `.bib` (fora de `build/`).
+* `extensions.json` — recomenda [LaTeX Workshop](https://marketplace.visualstudio.com/items?itemName=James-Yu.latex-workshop) e, sem `--watch`, [Run on Save](https://marketplace.visualstudio.com/items?itemName=pucelle.run-on-save) (`pucelle.run-on-save`, também no [Open VSX](https://open-vsx.org/extension/pucelle/run-on-save) pra VSCodium/Code - OSS). Projetos gerados por versões anteriores usavam o `emeraldwalk.RunOnSave`: rodar o `--init` de novo troca a configuração e a recomendação antigas pelas novas.
 * `tasks.json` (só com `--watch`) — task em segundo plano **TexFlow Watch**, que roda `texflow --build --watch` e inicia sozinha ao abrir a pasta (na primeira vez o VS Code pergunta se pode rodar tasks automáticas; dá pra iniciar à mão em *Tasks: Run Task*).
 
-**RunOnSave ou watch?** Os dois rebuildam ao salvar o `input.json` ou qualquer parcial. O RunOnSave roda um processo novo a cada `Ctrl+S`; a task de watch deixa um processo só rodando (rebuild mais rápido, pega também mudanças feitas fora do editor e não precisa de extensão extra) e joga os erros no painel **Problems**: o resumo de erros do TeXFlow sai no formato `arquivo:linha: mensagem`, que o `problemMatcher` da task reconhece, apontando pro `build/main.tex` renderizado.
+**Run on Save ou watch?** Os dois rebuildam ao salvar o `input.json` ou qualquer parcial. O Run on Save roda um processo novo a cada `Ctrl+S`; a task de watch deixa um processo só rodando (rebuild mais rápido, pega também mudanças feitas fora do editor e não precisa de extensão extra) e joga os erros no painel **Problems**: o resumo de erros do TeXFlow sai no formato `arquivo:linha: mensagem`, que o `problemMatcher` da task reconhece, apontando pro `build/main.tex` renderizado.
 
 Nos dois casos o preview do PDF recarrega quando o `build/main.pdf` muda, o SyncTeX (forward/inverse search) usa o `build/main.synctex.gz` e o painel de erros do LaTeX Workshop lê o `build/main.log` — com qualquer um dos engines (`latex-workshop.latex.outDir` é `%DIR%/build/`). Inverse search leva pro `build/main.tex` renderizado, não pro template, já que é ele que o LaTeX compila.
 
-Se os arquivos já existirem, o `--init` **não os sobrescreve**: ele pergunta e atualiza só a parte do TeXFlow (chaves `latex-workshop.*` e `emeraldwalk.runonsave` no `settings.json`, as recomendações no `extensions.json`, a task `TexFlow Watch` no `tasks.json`), preservando suas outras configurações e comentários. Só se o arquivo não for um JSON(C) válido ele oferece sobrescrever, como antes. Rodar de novo com outro `--engine`/`--watch` troca a configuração.
+Se os arquivos já existirem, o `--init` **não os sobrescreve**: ele pergunta e atualiza só a parte do TeXFlow (chaves `latex-workshop.*` e `runOnSave.commands` no `settings.json`, as recomendações no `extensions.json`, a task `TexFlow Watch` no `tasks.json`), preservando suas outras configurações e comentários. Só se o arquivo não for um JSON(C) válido ele oferece sobrescrever, como antes. Rodar de novo com outro `--engine`/`--watch` troca a configuração.
 
-> O rebuild via RunOnSave/watch é necessário porque o `main.tex` inclui os parciais via Jinja (`<<% include %>>`), não por `\input` — então o build-on-save nativo do LaTeX Workshop (desligado no `settings.json` gerado) só enxergaria o próprio `main.tex`.
+> O rebuild via Run on Save/watch é necessário porque o `main.tex` inclui os parciais via Jinja (`<<% include %>>`), não por `\input` — então o build-on-save nativo do LaTeX Workshop (desligado no `settings.json` gerado) só enxergaria o próprio `main.tex`.
 >
-> Convém rodar `--init` na mesma pasta que contém `input.json` e `main.tex`, e abrir essa pasta como pasta do VS Code — a receita assume `--input %DIR%/input.json --template %DIR%` e o RunOnSave/a task rodam `--input input.json --template .` na raiz do workspace.
+> Convém rodar `--init` na mesma pasta que contém `input.json` e `main.tex`, e abrir essa pasta como pasta do VS Code — a receita assume `--input %DIR%/input.json --template %DIR%` e o Run on Save/a task rodam `--input input.json --template .` na raiz do workspace.
 
 O PDF final é gerado em `<pasta_do_template>/build/main.pdf`. Imagens e gráficos vêm do pacote (`assets/images` e `assets/plots`) e também são copiados para `build/images` e `build/plots`.
 

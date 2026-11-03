@@ -59,7 +59,8 @@ def test_run_init_recommends_run_on_save_extension(tmp_path, monkeypatch):
 
     content = (tmp_path / ".vscode" / "extensions.json").read_text(encoding="utf-8")
     data = json.loads(_strip_jsonc_comments(content))
-    assert "emeraldwalk.RunOnSave" in data["recommendations"]
+    assert "pucelle.run-on-save" in data["recommendations"]
+    assert "emeraldwalk.RunOnSave" not in data["recommendations"]
 
 
 def test_run_init_settings_configure_rebuild_on_save(tmp_path, monkeypatch):
@@ -70,12 +71,16 @@ def test_run_init_settings_configure_rebuild_on_save(tmp_path, monkeypatch):
     content = (tmp_path / ".vscode" / "settings.json").read_text(encoding="utf-8")
     data = json.loads(_strip_jsonc_comments(content))
 
-    # RunOnSave rebuilda qualquer .tex (e JSON/.sty/.cls/.bib) chamando "texflow --build"...
-    commands = data["emeraldwalk.runonsave"]["commands"]
+    # Run on Save rebuilda qualquer .tex (e JSON/.sty/.cls/.bib) chamando "texflow --build"...
+    commands = data["runOnSave.commands"]
     assert any(
-        c["match"] == r"\.(tex|json|sty|cls|bib)$" and "texflow" in c["cmd"] and "--build" in c["cmd"]
+        c["match"] == r"\.(tex|json|sty|cls|bib)$"
+        and "texflow" in c["command"]
+        and "--build" in c["command"]
+        and c["runIn"] == "backend"
         for c in commands
     )
+    assert "emeraldwalk.runonsave" not in data
     # ...e o build-on-save nativo do LaTeX Workshop fica desligado pra não
     # duplicar (ele não enxergaria os includes Jinja de qualquer forma).
     assert data["latex-workshop.latex.autoBuild.run"] == "never"
@@ -124,7 +129,8 @@ def test_settings_offer_both_recipes(tmp_path, monkeypatch):
     assert recipes["TexFlow Build"] == ["texflow"]
     assert recipes["TexFlow Build (Tectonic)"] == ["texflow-tectonic"]
     tools = {t["name"]: t for t in data["latex-workshop.latex.tools"]}
-    assert tools["texflow-tectonic"]["args"][:3] == ["--build", "--engine", "tectonic"]
+    assert tools["texflow-tectonic"]["args"][:4] == ["--build", "--engine", "tectonic", "--fast"]
+    assert "--fast" not in tools["texflow"]["args"]
     assert "--engine" not in tools["texflow"]["args"]
     assert data["latex-workshop.latex.recipe.default"] == "TexFlow Build"
 
@@ -133,10 +139,19 @@ def test_run_on_save_matches_json_and_style_files(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     run_init(auto_yes=True)
 
-    match = _read(tmp_path, "settings.json")["emeraldwalk.runonsave"]["commands"][0]["match"]
+    (command,) = _read(tmp_path, "settings.json")["runOnSave.commands"]
+    match, not_match = command["match"], command["notMatch"]
+
+    def runs(path):
+        return bool(re.search(match, path)) and not re.search(not_match, path)
+
     for name in ("main.tex", "input.json", "style.sty", "doc.cls", "refs.bib"):
-        assert re.search(match, name), name
-    assert not re.search(match, "build/main.pdf")
+        assert runs(f"/proj/{name}"), name
+    assert runs("/proj/src/intro.tex")
+    assert runs(r"C:\proj\src\intro.tex")
+    assert not runs("/proj/build/main.pdf")
+    assert not runs("/proj/build/main.tex")
+    assert not runs(r"C:\proj\build\main.tex")
 
 
 def test_init_tectonic_sets_default_recipe_and_run_on_save(tmp_path, monkeypatch):
@@ -145,8 +160,8 @@ def test_init_tectonic_sets_default_recipe_and_run_on_save(tmp_path, monkeypatch
 
     data = _read(tmp_path, "settings.json")
     assert data["latex-workshop.latex.recipe.default"] == "TexFlow Build (Tectonic)"
-    cmd = data["emeraldwalk.runonsave"]["commands"][0]["cmd"]
-    assert cmd == "texflow --build --engine tectonic --input input.json --template ."
+    cmd = data["runOnSave.commands"][0]["command"]
+    assert cmd == "texflow --build --engine tectonic --fast --input input.json --template ."
     assert not (tmp_path / ".vscode" / "tasks.json").exists()
 
 
@@ -155,7 +170,7 @@ def test_init_watch_writes_task_instead_of_run_on_save(tmp_path, monkeypatch):
     run_init(auto_yes=True, watch=True)
 
     settings = _read(tmp_path, "settings.json")
-    assert "emeraldwalk.runonsave" not in settings
+    assert "runOnSave.commands" not in settings
     assert settings["latex-workshop.latex.recipe.default"] == "TexFlow Build"
 
     recs = _read(tmp_path, "extensions.json")["recommendations"]
@@ -174,7 +189,7 @@ def test_init_watch_tectonic_task_uses_engine(tmp_path, monkeypatch):
     run_init(auto_yes=True, engine="tectonic", watch=True)
 
     (task,) = _read(tmp_path, "tasks.json")["tasks"]
-    assert task["args"][-2:] == ["--engine", "tectonic"]
+    assert task["args"][-3:] == ["--engine", "tectonic", "--fast"]
     assert _read(tmp_path, "settings.json")["latex-workshop.latex.recipe.default"] == "TexFlow Build (Tectonic)"
 
 
@@ -238,7 +253,7 @@ def test_merge_keeps_user_keys_and_comments(tmp_path, monkeypatch):
     assert data["files.exclude"] == {"**/build": True}
     assert data["latex-workshop.latex.recipe.default"] == "TexFlow Build (Tectonic)"
     assert "latex-workshop.latex.recipes" in data
-    assert "emeraldwalk.runonsave" in data
+    assert "runOnSave.commands" in data
 
 
 def test_merge_is_idempotent(tmp_path, monkeypatch, capsys):
@@ -259,8 +274,37 @@ def test_merge_with_watch_removes_run_on_save(tmp_path, monkeypatch):
     run_init(auto_yes=True)
     run_init(auto_yes=True, watch=True)
 
-    assert "emeraldwalk.runonsave" not in _read(tmp_path, "settings.json")
-    assert "emeraldwalk.RunOnSave" not in _read(tmp_path, "extensions.json")["recommendations"]
+    assert "runOnSave.commands" not in _read(tmp_path, "settings.json")
+    assert "pucelle.run-on-save" not in _read(tmp_path, "extensions.json")["recommendations"]
+
+
+def test_merge_replaces_legacy_emeraldwalk_run_on_save(tmp_path, monkeypatch):
+    """Projetos gerados até a 0.2.1 usavam o emeraldwalk.RunOnSave: o merge
+    troca pela configuração do pucelle.run-on-save (manter as duas faria cada
+    save compilar duas vezes) e preserva o resto."""
+    monkeypatch.chdir(tmp_path)
+    _write_vscode(
+        tmp_path,
+        "settings.json",
+        '{\n    "editor.fontSize": 15,\n    "emeraldwalk.runonsave": {\n'
+        '        "commands": [{"match": "\\\\.tex$", "cmd": "texflow --build"}]\n    }\n}\n',
+    )
+    _write_vscode(
+        tmp_path,
+        "extensions.json",
+        '{\n    "recommendations": ["James-Yu.latex-workshop", "emeraldwalk.RunOnSave"]\n}\n',
+    )
+
+    run_init(auto_yes=True)
+
+    settings = _read(tmp_path, "settings.json")
+    assert "emeraldwalk.runonsave" not in settings
+    assert settings["runOnSave.commands"][0]["command"].startswith("texflow --build")
+    assert settings["editor.fontSize"] == 15
+    assert _read(tmp_path, "extensions.json")["recommendations"] == [
+        "James-Yu.latex-workshop",
+        "pucelle.run-on-save",
+    ]
 
 
 def test_merge_extensions_keeps_user_recommendations(tmp_path, monkeypatch):
@@ -272,7 +316,7 @@ def test_merge_extensions_keeps_user_recommendations(tmp_path, monkeypatch):
     assert _read(tmp_path, "extensions.json")["recommendations"] == [
         "ms-python.python",
         "James-Yu.latex-workshop",
-        "emeraldwalk.RunOnSave",
+        "pucelle.run-on-save",
     ]
 
 

@@ -27,8 +27,8 @@
     // "texflow --init --engine tectonic" já gera assim).
     "latex-workshop.latex.recipe.default": "TexFlow Build",
 
-    // O rebuild automático ao salvar é feito pelo RunOnSave (bloco
-    // "emeraldwalk.runonsave" no fim deste arquivo) ou, se gerado com
+    // O rebuild automático ao salvar é feito pelo Run on Save (bloco
+    // "runOnSave.commands" no fim deste arquivo) ou, se gerado com
     // "texflow --init --watch", pela task "TexFlow Watch" em
     // .vscode/tasks.json — não pelo build-on-save nativo do LaTeX Workshop. Motivo: o main.tex puxa os
     // parciais e o layout por tags Jinja "<<% include %>>" (exigência do
@@ -57,7 +57,8 @@
         {
             // Igual à anterior, mas compila com o Tectonic: não precisa
             // de TeX Live (baixa os pacotes na primeira vez e guarda em
-            // cache). Ver o aviso sobre o biber no README.
+            // cache). Com biblatex, precisa do biber 2.17: ver o aviso
+            // sobre o biber no README.
             "name": "TexFlow Build (Tectonic)",
             "tools": [
                 "texflow-tectonic"
@@ -98,13 +99,18 @@
             ]
         },
         {
-            // Mesmos argumentos do "texflow" acima, com --engine tectonic.
+            // Mesmos argumentos do "texflow" acima, com --engine tectonic
+            // e --fast: uma passada só do TeX, reaproveitando o .aux/.bbl
+            // do build anterior (~metade do tempo). Citação nova ou
+            // numeração que mudou aparece no build seguinte; tire o
+            // "--fast" pra ter sempre o build completo.
             "name": "texflow-tectonic",
             "command": "texflow",
             "args": [
                 "--build",
                 "--engine",
                 "tectonic",
+                "--fast",
                 "--input",
                 "%DIR%/input.json",
                 "--template",
@@ -147,21 +153,28 @@
     // main.tex. Esta regra do RunOnSave cobre a lacuna; o autobuild
     // nativo fica desligado logo acima pra não duplicar.
     //
-    // Requer a extensão "emeraldwalk.RunOnSave" (ver extensions.json).
-    // O comando roda na raiz do workspace: abra a pasta do template
-    // (a que contém input.json e main.tex) como pasta do VS Code.
+    // Requer a extensão "pucelle.run-on-save" (ver extensions.json),
+    // publicada no Marketplace do VS Code e no Open VSX (VSCodium,
+    // Code - OSS). O comando roda em segundo plano na raiz do workspace:
+    // abra a pasta do template (a que contém input.json e main.tex) como
+    // pasta do VS Code. A saída vai pro painel "Run on Save", que só
+    // ganha foco quando o build falha.
     //
     // Alternativa: "texflow --init --watch" troca este bloco pela task
     // "TexFlow Watch" (.vscode/tasks.json), que deixa o TexFlow rodando
-    // em modo --watch e dispensa a extensão RunOnSave.
+    // em modo --watch e dispensa a extensão Run on Save.
     // ------------------------------------------------------------------
-    "emeraldwalk.runonsave": {
-        "commands": [
-            {
-                "match": "\\.(tex|json|sty|cls|bib)$",
-                "isAsync": false,
-                "cmd": "texflow --build --input input.json --template ."
-            }
-        ]
-    }
+    "runOnSave.commands": [
+        {
+            "match": "\\.(tex|json|sty|cls|bib)$",
+            // Não rebuilda ao salvar algo dentro de build/ (saída do
+            // próprio TexFlow).
+            "notMatch": "[\\\\/]build[\\\\/]",
+            "command": "texflow --build --input input.json --template .",
+            "runIn": "backend",
+            "async": false,
+            "runningStatusMessage": "TexFlow: compilando...",
+            "finishStatusMessage": "TexFlow: PDF atualizado"
+        }
+    ]
 }

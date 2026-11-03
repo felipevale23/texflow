@@ -281,6 +281,10 @@ def captured_cmd(monkeypatch):
         builder, "run_latex_command", lambda emoji, cmd, cwd=None, env=None: calls.append((cmd, cwd, env))
     )
     monkeypatch.delenv("TEXFLOW_DEBUG", raising=False)
+    monkeypatch.delenv("TEXFLOW_FAST", raising=False)
+    monkeypatch.delenv("TEXFLOW_BIBER", raising=False)
+    # Sem biber 2.17 "instalado", independente da máquina que roda os testes.
+    monkeypatch.setattr(builder, "DEFAULT_TECTONIC_BIBER", Path("/nonexistent/biber"))
     return calls
 
 
@@ -318,6 +322,85 @@ def test_tectonic_command_debug_prints(captured_cmd, tmp_path, monkeypatch):
     monkeypatch.setenv("TEXFLOW_DEBUG", "1")
     tectonic_build_process(tmp_path)
     assert captured_cmd[0][0][-1] == "--print"
+
+
+def _build_dir_with(tmp_path, *names):
+    for name in names:
+        (tmp_path / name).write_text("x")
+    return tmp_path
+
+
+def test_tectonic_fast_runs_single_pass_when_intermediates_exist(captured_cmd, tmp_path, monkeypatch):
+    monkeypatch.setattr(builder, "resolve_tectonic", lambda: "/opt/tectonic")
+    monkeypatch.setenv("TEXFLOW_FAST", "1")
+    tectonic_build_process(_build_dir_with(tmp_path, "main.aux", "main.bcf", "main.bbl"))
+    assert captured_cmd[0][0][-1] == "--reruns=0"
+
+
+def test_tectonic_fast_without_biblatex_needs_only_aux(captured_cmd, tmp_path, monkeypatch):
+    monkeypatch.setattr(builder, "resolve_tectonic", lambda: "/opt/tectonic")
+    monkeypatch.setenv("TEXFLOW_FAST", "1")
+    tectonic_build_process(_build_dir_with(tmp_path, "main.aux"))
+    assert "--reruns=0" in captured_cmd[0][0]
+
+
+@pytest.mark.parametrize(
+    "files",
+    [(), ("main.bbl",), ("main.aux", "main.bcf")],
+    ids=["clean-build-dir", "no-aux", "biblatex-without-bbl"],
+)
+def test_tectonic_fast_falls_back_to_full_build(captured_cmd, tmp_path, monkeypatch, files):
+    monkeypatch.setattr(builder, "resolve_tectonic", lambda: "/opt/tectonic")
+    monkeypatch.setenv("TEXFLOW_FAST", "1")
+    tectonic_build_process(_build_dir_with(tmp_path, *files))
+    assert "--reruns=0" not in captured_cmd[0][0]
+
+
+def test_tectonic_without_fast_ignores_intermediates(captured_cmd, tmp_path, monkeypatch):
+    monkeypatch.setattr(builder, "resolve_tectonic", lambda: "/opt/tectonic")
+    tectonic_build_process(_build_dir_with(tmp_path, "main.aux", "main.bcf", "main.bbl"))
+    assert "--reruns=0" not in captured_cmd[0][0]
+
+
+def test_tectonic_puts_default_biber_first_on_path(captured_cmd, tmp_path, monkeypatch):
+    monkeypatch.setattr(builder, "resolve_tectonic", lambda: "/opt/tectonic")
+    biber = _fake_exe(tmp_path / "opt" / "biber-2.17" / "bin" / "biber")
+    monkeypatch.setattr(builder, "DEFAULT_TECTONIC_BIBER", biber)
+    tectonic_build_process(tmp_path)
+    env = captured_cmd[0][2]
+    assert env["PATH"].split(os.pathsep)[0] == str(biber.parent)
+
+
+@pytest.mark.parametrize("as_dir", [False, True], ids=["binary", "directory"])
+def test_tectonic_biber_env_var_wins(captured_cmd, tmp_path, monkeypatch, as_dir):
+    monkeypatch.setattr(builder, "resolve_tectonic", lambda: "/opt/tectonic")
+    monkeypatch.setattr(builder, "DEFAULT_TECTONIC_BIBER", _fake_exe(tmp_path / "default" / "biber"))
+    custom = _fake_exe(tmp_path / "custom" / "biber")
+    monkeypatch.setenv("TEXFLOW_BIBER", str(custom.parent if as_dir else custom))
+    tectonic_build_process(tmp_path)
+    assert captured_cmd[0][2]["PATH"].split(os.pathsep)[0] == str(custom.parent)
+
+
+def test_tectonic_biber_env_var_pointing_nowhere_is_an_error(captured_cmd, tmp_path, monkeypatch):
+    monkeypatch.setattr(builder, "resolve_tectonic", lambda: "/opt/tectonic")
+    monkeypatch.setenv("TEXFLOW_BIBER", str(tmp_path / "nope"))
+    with pytest.raises(FileNotFoundError, match="TEXFLOW_BIBER"):
+        tectonic_build_process(tmp_path)
+
+
+def test_tectonic_without_compatible_biber_keeps_path(captured_cmd, tmp_path, monkeypatch):
+    monkeypatch.setattr(builder, "resolve_tectonic", lambda: "/opt/tectonic")
+    monkeypatch.setenv("PATH", "/usr/bin")
+    tectonic_build_process(tmp_path)
+    assert captured_cmd[0][2]["PATH"] == "/usr/bin"
+
+
+def test_cli_fast_flag_sets_env(monkeypatch):
+    # setenv (e não delenv) pro monkeypatch restaurar a env depois: a CLI
+    # escreve direto em os.environ.
+    monkeypatch.setenv("TEXFLOW_FAST", "0")
+    _run_cli(monkeypatch, ["--build", "--input", "x.json", "--template", "t", "--fast"])
+    assert os.environ["TEXFLOW_FAST"] == "1"
 
 
 # ----------------------------------------------------------------------

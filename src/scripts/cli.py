@@ -108,7 +108,7 @@ def cli():
         "--init",
         action="store_true",
         help="Cria .vscode/settings.json e extensions.json com a receita do LaTeX Workshop pro TexFlow "
-             "(com --engine tectonic: usa o Tectonic; com --watch: task 'TexFlow Watch' em vez do RunOnSave)."
+             "(com --engine tectonic: usa o Tectonic; com --watch: task 'TexFlow Watch' em vez do Run on Save)."
     )
 
     # Argumento opcional com flag curta e longa
@@ -139,7 +139,15 @@ def cli():
         "-w", "--watch",
         action="store_true",
         help="Com --build: refaz o build a cada mudança no JSON, no template ou nos assets (Ctrl+C sai). "
-             "Com --init: gera a task 'TexFlow Watch' (.vscode/tasks.json) em vez do RunOnSave."
+             "Com --init: gera a task 'TexFlow Watch' (.vscode/tasks.json) em vez do Run on Save."
+    )
+
+    parser.add_argument(
+        "--fast",
+        action="store_true",
+        help="Com --engine tectonic: uma passada só do TeX, reaproveitando o .aux/.bbl do build "
+             "anterior (bem mais rápido; citação nova ou numeração que mudou aparece no build "
+             "seguinte). Também lido da env TEXFLOW_FAST=1."
     )
 
     parser.add_argument(
@@ -172,6 +180,8 @@ def cli():
         
         if args.debug:
             os.environ["TEXFLOW_DEBUG"] = "1"
+        if args.fast:
+            os.environ["TEXFLOW_FAST"] = "1"
     
         if passed_args == 0:
             welcome()

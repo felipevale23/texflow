@@ -10,9 +10,17 @@ from scripts.utils import confirm
 VSCODE_ASSETS = res.files("assets").joinpath("vscode")
 
 TECTONIC_RECIPE = "TexFlow Build (Tectonic)"
-RUN_ON_SAVE_KEY = "emeraldwalk.runonsave"
-RUN_ON_SAVE_EXT = "emeraldwalk.RunOnSave"
+# Rebuild ao salvar via pucelle.run-on-save (Marketplace e Open VSX).
+RUN_ON_SAVE_KEY = "runOnSave.commands"
+RUN_ON_SAVE_EXT = "pucelle.run-on-save"
 RUN_ON_SAVE_CMD = "texflow --build --input input.json --template ."
+# Até a 0.2.1 o --init usava o emeraldwalk.RunOnSave, que não está no Open
+# VSX. Um merge troca a configuração antiga pela nova: manter as duas faria
+# cada save compilar duas vezes se as duas extensões estivessem instaladas.
+LEGACY_RUN_ON_SAVE_KEY = "emeraldwalk.runonsave"
+LEGACY_RUN_ON_SAVE_EXT = "emeraldwalk.RunOnSave"
+# Flags do texflow com --engine tectonic: --fast faz uma passada só do TeX.
+TECTONIC_FLAGS = ["--engine", "tectonic", "--fast"]
 WATCH_TASK = "TexFlow Watch"
 
 
@@ -34,7 +42,10 @@ def _scalar(text: str, node: jsonc.Node):
 def _is_managed(key: str) -> bool:
     """Chaves de settings.json que pertencem ao TexFlow e podem ser
     sobrescritas num merge; todo o resto é do usuário e fica intacto."""
-    return key.startswith("latex-workshop.") or key == RUN_ON_SAVE_KEY
+    return key.startswith("latex-workshop.") or key in (
+        RUN_ON_SAVE_KEY,
+        LEGACY_RUN_ON_SAVE_KEY,
+    )
 
 
 def _remove_recommendation(text: str, ext: str) -> str:
@@ -60,7 +71,7 @@ def render_settings(engine: str, watch: bool) -> str:
         )
         old = json.dumps(RUN_ON_SAVE_CMD)
         new = json.dumps(
-            RUN_ON_SAVE_CMD.replace("--build", "--build --engine tectonic")
+            RUN_ON_SAVE_CMD.replace("--build", "--build " + " ".join(TECTONIC_FLAGS))
         )
         if text.count(old) != 1:
             raise RuntimeError(
@@ -90,7 +101,8 @@ def render_tasks(engine: str) -> str:
         task = jsonc.find(_root_object(text), "tasks").value.elements[0].value
         args = jsonc.find(task, "args").value
         indent = jsonc.indent_of(text, args.elements[-1].start)
-        text = jsonc.insert_last(text, args, f'{indent}"--engine",\n{indent}"tectonic"')
+        flags = ",\n".join(f"{indent}{json.dumps(flag)}" for flag in TECTONIC_FLAGS)
+        text = jsonc.insert_last(text, args, flags)
 
     return text
 
@@ -112,6 +124,7 @@ def merge_settings(current: str, generated: str, watch: bool) -> str:
             current, el.key, value, doc=jsonc.leading(generated, gen_root, n)
         )
 
+    current = jsonc.remove_member(current, LEGACY_RUN_ON_SAVE_KEY)
     if watch:
         current = jsonc.remove_member(current, RUN_ON_SAVE_KEY)
 
@@ -139,6 +152,7 @@ def merge_extensions(current: str, generated: str, watch: bool) -> str:
         indent = jsonc.indent_of(current, items[-1].start) if items else "        "
         current = jsonc.insert_last(current, recs.value, f"{indent}{json.dumps(ext)}")
 
+    current = _remove_recommendation(current, LEGACY_RUN_ON_SAVE_EXT)
     if watch:
         current = _remove_recommendation(current, RUN_ON_SAVE_EXT)
 
@@ -217,7 +231,7 @@ def run_init(auto_yes: bool, engine: str = "latexmk", watch: bool = False) -> No
     também .vscode/tasks.json (task "TexFlow Watch") se watch=True.
 
     Se os arquivos já existirem, só as chaves do TexFlow são atualizadas
-    (latex-workshop.* e emeraldwalk.runonsave no settings.json, as
+    (latex-workshop.* e runOnSave.commands no settings.json, as
     recomendações no extensions.json, a task "TexFlow Watch" no
     tasks.json), preservando o resto e os comentários."""
 
