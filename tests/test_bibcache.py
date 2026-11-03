@@ -1,12 +1,11 @@
 import os
 import subprocess
-import sys
 from pathlib import Path
 
 import pytest
 
 from scripts import bibcache
-from scripts.bibcache import install_shim, run_cached_biber
+from scripts.bibcache import install_shim
 
 pytestmark = pytest.mark.skipif(os.name == "nt", reason="o shim do cache é um script sh")
 
@@ -39,78 +38,91 @@ def _workdir(tmp_path: Path, name: str, bcf: str, bib: str = "@book{a}") -> Path
     return work
 
 
-def test_second_run_with_same_inputs_uses_cache(tmp_path):
+def _run(shim_dir: Path, work: Path) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        [str(shim_dir / "biber"), "main"], cwd=work, capture_output=True, text=True, check=False
+    )
+
+
+@pytest.fixture
+def setup(tmp_path):
     biber, counter = _fake_biber(tmp_path)
-    cache = tmp_path / "cache"
+    shim_dir = install_shim(tmp_path / "build", biber)
+    return tmp_path, biber, counter, shim_dir
 
-    assert run_cached_biber(biber, cache, ["main"], _workdir(tmp_path, "w1", "bcf-1")) == 0
+
+def test_second_run_with_same_inputs_uses_cache(setup):
+    tmp_path, _biber, counter, shim_dir = setup
+
+    assert _run(shim_dir, _workdir(tmp_path, "w1", "bcf-1")).returncode == 0
     work2 = _workdir(tmp_path, "w2", "bcf-1")
-    assert run_cached_biber(biber, cache, ["main"], work2) == 0
+    result = _run(shim_dir, work2)
 
+    assert result.returncode == 0
+    assert "cache" in result.stdout
     assert _runs(counter) == 1
     assert (work2 / "main.bbl").read_text() == "bcf-1"
     assert (work2 / "main.blg").is_file()
 
 
-@pytest.mark.parametrize("change", ["bcf", "bib"])
-def test_changed_inputs_run_biber_again(tmp_path, change):
-    biber, counter = _fake_biber(tmp_path)
-    cache = tmp_path / "cache"
-    run_cached_biber(biber, cache, ["main"], _workdir(tmp_path, "w1", "bcf-1"))
+@pytest.mark.parametrize("change", ["bcf", "bib", "bib-name"])
+def test_changed_inputs_run_biber_again(setup, change):
+    tmp_path, _biber, counter, shim_dir = setup
+    _run(shim_dir, _workdir(tmp_path, "w1", "bcf-1"))
 
     if change == "bcf":
         work2 = _workdir(tmp_path, "w2", "bcf-2")
-    else:
+    elif change == "bib":
         work2 = _workdir(tmp_path, "w2", "bcf-1", bib="@book{b}")
-    run_cached_biber(biber, cache, ["main"], work2)
+    else:
+        work2 = _workdir(tmp_path, "w2", "bcf-1")
+        (work2 / "src" / "refs.bib").rename(work2 / "src" / "outro.bib")
+    _run(shim_dir, work2)
 
     assert _runs(counter) == 2
-    expected = "bcf-2" if change == "bcf" else "bcf-1"
-    assert (work2 / "main.bbl").read_text() == expected
+    assert (work2 / "main.bbl").read_text() == ("bcf-2" if change == "bcf" else "bcf-1")
 
 
-def test_different_biber_binary_invalidates_cache(tmp_path):
-    biber, counter = _fake_biber(tmp_path)
-    cache = tmp_path / "cache"
-    run_cached_biber(biber, cache, ["main"], _workdir(tmp_path, "w1", "bcf-1"))
+def test_different_biber_binary_invalidates_cache(setup):
+    tmp_path, biber, counter, shim_dir = setup
+    _run(shim_dir, _workdir(tmp_path, "w1", "bcf-1"))
 
     biber.write_text(biber.read_text() + "# nova versão\n")
-    run_cached_biber(biber, cache, ["main"], _workdir(tmp_path, "w2", "bcf-1"))
+    _run(shim_dir, _workdir(tmp_path, "w2", "bcf-1"))
 
     assert _runs(counter) == 2
 
 
-def test_failed_biber_is_not_cached(tmp_path):
+def test_failed_biber_is_not_cached_and_keeps_exit_code(tmp_path):
     biber = tmp_path / "biber"
-    biber.write_text('#!/bin/sh\necho x >> "$0.runs"\nexit 2\n')
+    biber.write_text(f'#!/bin/sh\necho x >> "{tmp_path}/runs"\nexit 2\n')
     biber.chmod(0o755)
-    cache = tmp_path / "cache"
+    shim_dir = install_shim(tmp_path / "build", biber)
 
-    assert run_cached_biber(biber, cache, ["main"], _workdir(tmp_path, "w1", "bcf")) == 2
-    assert run_cached_biber(biber, cache, ["main"], _workdir(tmp_path, "w2", "bcf")) == 2
-    assert len(Path(f"{biber}.runs").read_text().splitlines()) == 2
+    assert _run(shim_dir, _workdir(tmp_path, "w1", "bcf")).returncode == 2
+    assert _run(shim_dir, _workdir(tmp_path, "w2", "bcf")).returncode == 2
+    assert _runs(tmp_path / "runs") == 2
+
+
+def test_paths_with_spaces(tmp_path):
+    base = tmp_path / "com espaço"
+    base.mkdir()
+    biber, counter = _fake_biber(base)
+    shim_dir = install_shim(base / "meu build", biber)
+
+    for name in ("w1", "w2"):
+        assert _run(shim_dir, _workdir(base, name, "bcf")).returncode == 0
+    assert _runs(counter) == 1
+
+
+def test_install_shim_is_stable(setup):
+    tmp_path, biber, _counter, shim_dir = setup
+    shim = shim_dir / "biber"
+    before = shim.stat().st_mtime_ns
+    install_shim(tmp_path / "build", biber)
+    assert shim.stat().st_mtime_ns == before
 
 
 def test_cache_can_be_disabled(monkeypatch):
     monkeypatch.setenv("TEXFLOW_NO_CACHE", "1")
     assert not bibcache.cache_enabled()
-
-
-def test_shim_calls_texflow_and_caches(tmp_path, monkeypatch):
-    """O shim gerado roda de verdade: chama este TexFlow (pelo código-fonte)
-    com --biber-cache, que roda o biber falso só na primeira vez."""
-    main_py = Path(__file__).resolve().parents[1] / "src" / "main.py"
-    monkeypatch.setattr(sys, "argv", [str(main_py)])
-    biber, counter = _fake_biber(tmp_path)
-    shim_dir = install_shim(tmp_path / "build", biber)
-
-    for name in ("w1", "w2"):
-        work = _workdir(tmp_path, name, "bcf-1")
-        result = subprocess.run(
-            [str(shim_dir / "biber"), "main"], cwd=work, capture_output=True, text=True, check=False
-        )
-        assert result.returncode == 0, result.stderr
-        assert (work / "main.bbl").read_text() == "bcf-1"
-
-    assert _runs(counter) == 1
-    assert "cache" in result.stdout

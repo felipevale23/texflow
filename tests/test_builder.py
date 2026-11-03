@@ -411,8 +411,7 @@ def test_tectonic_puts_biber_cache_shim_first(captured_cmd, tmp_path, monkeypatc
     path = captured_cmd[0][2]["PATH"].split(os.pathsep)
     shim = build_dir / ".texflow-cache" / "bin" / "biber"
     assert path[:2] == [str(shim.parent), str(biber.parent)]
-    text = shim.read_text()
-    assert "--biber-cache" in text and str(biber) in text
+    assert str(biber) in shim.read_text()
     assert os.access(shim, os.X_OK)
 
 
